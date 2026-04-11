@@ -14,6 +14,7 @@ const els = {
   saveSettings: $('#save-settings'),
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
+  clearChat: $('#clear-chat'),
   stopBtn: $('#stop-btn'),
   strictMode: $('#strict-mode'),
   messages: $('#messages'),
@@ -363,6 +364,13 @@ els.loadTranscript.addEventListener('click', loadTranscript);
 els.summarize.addEventListener('click', summarize);
 els.stopBtn.addEventListener('click', () => {
   state.abortController?.abort();
+});
+els.clearChat.addEventListener('click', (e) => {
+  e.preventDefault();
+  state.abortController?.abort();
+  state.history = [];
+  els.messages.innerHTML = '';
+  els.askInput.focus();
 });
 els.messages.addEventListener('click', async (e) => {
   const link = e.target.closest('a.ts-link');

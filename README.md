@@ -1,4 +1,4 @@
-# Udemy Lecture AI Assistant
+# Udemy Lecture AI Assistant (local LLM)
 
 Chrome extension for working with Udemy lectures via a local LLM (LM Studio or any OpenAI-compatible endpoint). It extracts the transcript of the current lecture, summarizes it, and answers questions about it — or works as a plain chat when no transcript is loaded.
 

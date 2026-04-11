@@ -124,6 +124,17 @@ button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 .meta { color: var(--muted); font-size: 11px; }
 
+.strict-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.strict-toggle input { margin: 0; accent-color: var(--accent); }
+
 .chat {
   flex: 1;
   display: flex;

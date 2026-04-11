@@ -13,6 +13,7 @@ const els = {
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
   captionLocale: $('#caption-locale'),
+  strictMode: $('#strict-mode'),
   transcriptMeta: $('#transcript-meta'),
   messages: $('#messages'),
   askForm: $('#ask-form'),
@@ -41,6 +42,21 @@ async function getActiveUdemyTab() {
     return null;
   }
   return tab;
+}
+
+async function sendToTab(tabId, message) {
+  try {
+    return await chrome.tabs.sendMessage(tabId, message);
+  } catch (e) {
+    if (!/Receiving end does not exist|Could not establish connection/i.test(e.message)) {
+      throw e;
+    }
+  }
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['content.js'],
+  });
+  return chrome.tabs.sendMessage(tabId, message);
 }
 
 function addMsg(role, text) {
@@ -133,17 +149,17 @@ async function loadTranscript() {
   }
   els.loadTranscript.disabled = true;
   els.loadTranscript.textContent = 'Loading…';
+  state.transcript = null;
+  state.meta = null;
   try {
     const preferredLocale = els.captionLocale.value || undefined;
-    const resp = await chrome.tabs.sendMessage(tab.id, {
+    const resp = await sendToTab(tab.id, {
       type: 'GET_TRANSCRIPT',
       preferredLocale,
     });
     if (!resp?.ok) throw new Error(resp?.error || 'no response from content script');
     state.transcript = resp.transcript;
     state.meta = resp.meta;
-    state.history = [];
-    els.messages.innerHTML = '';
     els.lectureTitle.textContent = resp.meta.lectureTitle || 'Lecture';
     populateCaptionLocales(resp.transcript);
     const t = resp.transcript;
@@ -166,15 +182,27 @@ function systemPrompt() {
   const body =
     state.transcript?.timestampedText || state.transcript?.text || '(empty)';
   const hasTimestamps = state.transcript?.source === 'api';
-  return [
-    'Ты — помощник-репетитор, отвечающий на вопросы по лекции Udemy.',
+  const strict = els.strictMode.checked;
+  const common = [
+    'Ты — помощник-репетитор по лекции Udemy.',
     'ВАЖНО: всегда отвечай ТОЛЬКО на русском языке, независимо от языка транскрипта.',
-    'Используй исключительно текст транскрипта ниже как источник информации.',
-    'Если в транскрипте нет ответа — честно скажи об этом.',
     'Отвечай кратко и по делу. Используй короткие списки, когда это уместно.',
     hasTimestamps
       ? 'Каждая строка транскрипта начинается с [таймкода] — ссылайся на них, когда это уместно.'
       : '',
+  ];
+  const modeLines = strict
+    ? [
+        'Строгий режим: используй ИСКЛЮЧИТЕЛЬНО текст транскрипта ниже как источник информации.',
+        'Если в транскрипте нет ответа — честно скажи об этом и ничего не придумывай.',
+      ]
+    : [
+        'Транскрипт лекции ниже — это основной контекст, но ты можешь свободно использовать свои общие знания, чтобы дополнить, объяснить или ответить на смежные вопросы (например, по языку программирования из лекции).',
+        'Если вопрос не про лекцию — отвечай как обычный эксперт. Если про лекцию — опирайся на транскрипт, но можешь расширять объяснения своим знанием.',
+      ];
+  return [
+    ...common,
+    ...modeLines,
     '',
     `Название лекции: ${state.meta?.lectureTitle || 'Неизвестно'}`,
     '',
@@ -245,6 +273,9 @@ els.summarize.addEventListener('click', summarize);
 els.captionLocale.addEventListener('change', () => {
   if (state.transcript) loadTranscript();
 });
+els.strictMode.addEventListener('change', () => {
+  chrome.storage.local.set({ strictMode: els.strictMode.checked });
+});
 
 els.askForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -263,10 +294,12 @@ els.askInput.addEventListener('keydown', (e) => {
 
 (async function init() {
   await loadSettings();
+  const stored = await chrome.storage.local.get(['strictMode']);
+  els.strictMode.checked = Boolean(stored.strictMode);
   const tab = await getActiveUdemyTab();
   if (tab) {
     try {
-      const resp = await chrome.tabs.sendMessage(tab.id, { type: 'GET_LECTURE_META' });
+      const resp = await sendToTab(tab.id, { type: 'GET_LECTURE_META' });
       if (resp?.ok) els.lectureTitle.textContent = resp.meta.lectureTitle || 'Lecture';
     } catch {
       // content script not yet injected on this tab

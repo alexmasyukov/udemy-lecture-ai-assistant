@@ -32,7 +32,7 @@ function getLectureMeta() {
     document.querySelector('.curriculum-item-link--curriculum-item-title-content--RVO2k');
   return {
     courseId: args.courseId ?? null,
-    lectureId: args.initialCurriculumItemId ?? (Number(currentLectureId()) || null),
+    lectureId: Number(currentLectureId()) || args.initialCurriculumItemId || null,
     courseSlug: courseSlugMatch ? courseSlugMatch[1] : null,
     lectureTitle: titleEl?.textContent?.trim() || document.title,
     url: location.href,

@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Udemy Lecture AI",
+  "version": "0.1.0",
+  "description": "Summarize Udemy lecture transcripts and chat with a local LLM (LM Studio / OpenAI-compatible).",
+  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
+  "host_permissions": [
+    "https://www.udemy.com/*",
+    "https://*.udemycdn.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Udemy Lecture AI"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.udemy.com/course/*/learn/lecture/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

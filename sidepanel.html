@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Udemy Lecture AI</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="title">
+        <span class="dot" id="status-dot"></span>
+        <strong>Udemy Lecture AI</strong>
+      </div>
+      <button id="settings-toggle" class="icon-btn" title="Settings">⚙</button>
+    </header>
+
+    <section id="settings-panel" class="settings hidden">
+      <label>
+        Base URL
+        <input id="baseUrl" type="text" placeholder="http://127.0.0.1:1234/v1" />
+      </label>
+      <label>
+        Model
+        <div class="row">
+          <select id="model"></select>
+          <button id="reload-models" class="ghost">↻</button>
+        </div>
+      </label>
+      <label>
+        Temperature
+        <input id="temperature" type="number" min="0" max="2" step="0.1" />
+      </label>
+      <button id="save-settings" class="primary">Save</button>
+    </section>
+
+    <section class="lecture">
+      <div id="lecture-title" class="lecture-title">No lecture loaded</div>
+      <div class="row">
+        <button id="load-transcript" class="primary">Load transcript</button>
+        <button id="summarize" class="ghost" disabled>Summarize</button>
+      </div>
+      <div class="row">
+        <select id="caption-locale" disabled>
+          <option value="">Auto (manual EN preferred)</option>
+        </select>
+      </div>
+      <div id="transcript-meta" class="meta"></div>
+    </section>
+
+    <section class="chat" id="chat">
+      <div id="messages" class="messages"></div>
+      <form id="ask-form" class="composer">
+        <textarea
+          id="ask-input"
+          rows="2"
+          placeholder="Ask a question about this lecture…"
+          disabled
+        ></textarea>
+        <button id="ask-btn" class="primary" type="submit" disabled>Send</button>
+      </form>
+    </section>
+
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

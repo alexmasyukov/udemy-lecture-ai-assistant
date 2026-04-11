@@ -10,9 +10,9 @@
     <header class="topbar">
       <span class="dot" id="status-dot"></span>
       <div class="actions">
-        <button id="load-transcript" class="icon-btn" title="Load transcript">↻</button>
-        <button id="summarize" class="icon-btn" title="Summarize" disabled>∑</button>
-        <button id="strict-mode" class="icon-btn text-btn active" title="Отвечать только в рамках транскрипта лекции" aria-pressed="true">Lecture only</button>
+        <button id="load-transcript" class="icon-btn text-btn" title="Reload transcript">Reload transcript</button>
+        <button id="summarize" class="icon-btn text-btn" title="Summarize" disabled>Summary</button>
+        <button id="strict-mode" class="icon-btn text-btn active" title="Отвечать только в рамках транскрипта лекции" aria-pressed="true">Lecture context only</button>
         <button id="settings-toggle" class="icon-btn" title="Settings">⚙</button>
       </div>
     </header>
@@ -45,7 +45,7 @@
           placeholder="Вопрос…"
           disabled
         />
-        <button id="ask-btn" class="icon-btn" type="submit" title="Send" disabled>➤</button>
+        <button id="ask-btn" class="send-btn" type="submit" title="Send" disabled>Send</button>
       </form>
     </section>
 

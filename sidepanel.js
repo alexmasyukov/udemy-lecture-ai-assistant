@@ -257,6 +257,16 @@ els.askForm.addEventListener('submit', (e) => {
   ask(q);
 });
 
+chrome.webNavigation.onHistoryStateUpdated.addListener(
+  async (details) => {
+    if (details.frameId !== 0) return;
+    const tab = await getActiveUdemyTab();
+    if (!tab || tab.id !== details.tabId) return;
+    loadTranscript();
+  },
+  { url: [{ hostEquals: 'www.udemy.com', pathContains: '/learn/lecture/' }] }
+);
+
 (async function init() {
   await loadSettings();
   const stored = await chrome.storage.local.get(['strictMode']);

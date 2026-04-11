@@ -182,3 +182,17 @@ button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
   font: inherit;
   height: 28px;
 }
+.send-btn {
+  height: 28px;
+  min-width: 90px;
+  padding: 0 16px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+.send-btn:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+.send-btn:disabled { opacity: 0.45; cursor: not-allowed; }

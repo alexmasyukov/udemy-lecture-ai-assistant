@@ -3,7 +3,7 @@
   "name": "Udemy Lecture AI",
   "version": "0.1.0",
   "description": "Summarize Udemy lecture transcripts and chat with a local LLM (LM Studio / OpenAI-compatible).",
-  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs"],
+  "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs", "webNavigation"],
   "host_permissions": [
     "https://www.udemy.com/*",
     "https://*.udemycdn.com/*",

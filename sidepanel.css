@@ -134,29 +134,42 @@ button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
   display: flex;
   flex-direction: column;
   gap: 10px;
-  font-weight: 300;
+  font-weight: 400;
 }
 .msg {
-  padding: 3px 11px;
+  padding: 6px 11px;
   border-radius: 10px;
-  max-width: 92%;
   white-space: pre-wrap;
   word-wrap: break-word;
 }
 .msg.user {
-  background: #2a3142;
+  background: #10131a;
   color: var(--text);
   border: 1px solid var(--border);
   align-self: flex-end;
+  max-width: 92%;
   border-bottom-right-radius: 2px;
 }
 .msg.assistant {
   background: var(--panel-2);
   border: 1px solid var(--border);
-  align-self: flex-start;
+  align-self: stretch;
+  width: 100%;
   border-bottom-left-radius: 2px;
   white-space: normal;
 }
+body.transparent-assistant .msg.assistant {
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+.check-row {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px;
+}
+.check-row input { width: auto; accent-color: var(--accent); }
 .msg.assistant p { margin: 0 0 8px; }
 .msg.assistant p:last-child { margin-bottom: 0; }
 .msg.assistant h1,
@@ -240,17 +253,19 @@ button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
   border-radius: 6px;
   padding: 6px 10px;
   font: inherit;
+  outline: none;
 }
+.composer input:focus { border-color: #3a4358; }
 .send-btn {
   min-width: 90px;
   padding: 6px 16px;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  color: white;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
   font-weight: 600;
 }
-.send-btn:hover:not(:disabled) { background: var(--accent-2); border-color: var(--accent-2); }
+.send-btn:hover:not(:disabled) { background: #272e3e; }
 .send-btn:disabled { opacity: 0.45; cursor: not-allowed; }

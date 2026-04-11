@@ -10,6 +10,7 @@ const els = {
   temperature: $('#temperature'),
   uiFontSize: $('#uiFontSize'),
   chatFontSize: $('#chatFontSize'),
+  transparentAssistant: $('#transparentAssistant'),
   saveSettings: $('#save-settings'),
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
@@ -25,6 +26,7 @@ const state = {
   meta: null,
   history: [],
   settings: null,
+  busy: false,
 };
 
 // ----- helpers -----
@@ -83,7 +85,7 @@ function setStatus(kind) {
 }
 
 function setBusy(busy) {
-  els.askInput.disabled = busy;
+  state.busy = busy;
   els.askBtn.disabled = busy;
   els.summarize.disabled = busy || !state.transcript;
 }
@@ -95,6 +97,10 @@ function applyFontSizes() {
   document.documentElement.style.setProperty('--chat-font', `${state.settings.chatFontSize}px`);
 }
 
+function applyAppearance() {
+  document.body.classList.toggle('transparent-assistant', Boolean(state.settings.transparentAssistant));
+}
+
 async function loadSettings() {
   const resp = await send('GET_SETTINGS');
   state.settings = resp.settings;
@@ -102,7 +108,9 @@ async function loadSettings() {
   els.temperature.value = state.settings.temperature;
   els.uiFontSize.value = state.settings.uiFontSize;
   els.chatFontSize.value = state.settings.chatFontSize;
+  els.transparentAssistant.checked = Boolean(state.settings.transparentAssistant);
   applyFontSizes();
+  applyAppearance();
   await refreshModels();
 }
 
@@ -134,10 +142,12 @@ async function saveSettings() {
     temperature: parseFloat(els.temperature.value) || 0.3,
     uiFontSize: parseInt(els.uiFontSize.value, 10) || 13,
     chatFontSize: parseInt(els.chatFontSize.value, 10) || 16,
+    transparentAssistant: els.transparentAssistant.checked,
   };
   await send('SAVE_SETTINGS', { settings: next });
   state.settings = next;
   applyFontSizes();
+  applyAppearance();
   addMsg('system', 'Settings saved');
 }
 
@@ -287,6 +297,7 @@ async function ask(question) {
     addMsg('error', e.message);
   } finally {
     setBusy(false);
+    els.askInput.focus();
   }
 }
 
@@ -314,10 +325,12 @@ els.strictMode.addEventListener('click', () => {
 
 els.askForm.addEventListener('submit', (e) => {
   e.preventDefault();
+  if (state.busy) return;
   const q = els.askInput.value.trim();
   if (!q) return;
   els.askInput.value = '';
   ask(q);
+  els.askInput.focus();
 });
 
 chrome.webNavigation.onHistoryStateUpdated.addListener(

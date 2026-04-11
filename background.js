@@ -12,6 +12,7 @@ const DEFAULTS = {
   temperature: 0.3,
   uiFontSize: 13,
   chatFontSize: 16,
+  transparentAssistant: false,
 };
 
 async function getSettings() {

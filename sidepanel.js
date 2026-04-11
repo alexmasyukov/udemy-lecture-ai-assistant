@@ -56,10 +56,18 @@ async function sendToTab(tabId, message) {
   return chrome.tabs.sendMessage(tabId, message);
 }
 
+function setMsgContent(div, text) {
+  if (div.classList.contains('assistant')) {
+    div.innerHTML = window.renderMarkdown(text);
+  } else {
+    div.textContent = text;
+  }
+}
+
 function addMsg(role, text) {
   const div = document.createElement('div');
   div.className = `msg ${role}`;
-  div.textContent = text;
+  setMsgContent(div, text);
   els.messages.appendChild(div);
   els.messages.scrollTop = els.messages.scrollHeight;
   return div;
@@ -70,10 +78,10 @@ function setStatus(kind) {
   if (kind) els.statusDot.classList.add(kind);
 }
 
-function enableChat(enabled) {
-  els.askInput.disabled = !enabled;
-  els.askBtn.disabled = !enabled;
-  els.summarize.disabled = !enabled;
+function setBusy(busy) {
+  els.askInput.disabled = busy;
+  els.askBtn.disabled = busy;
+  els.summarize.disabled = busy || !state.transcript;
 }
 
 // ----- settings -----
@@ -141,7 +149,7 @@ async function loadTranscript() {
       'system',
       `${title} — ${t.source.toUpperCase()}${localeStr} · ${t.cues.length} cues · ${t.text.length.toLocaleString()} chars · lecture ${resp.meta.lectureId || '?'}`
     );
-    enableChat(true);
+    setBusy(false);
   } catch (e) {
     addMsg('error', `Could not load transcript: ${e.message}`);
   } finally {
@@ -152,35 +160,40 @@ async function loadTranscript() {
 // ----- LLM -----
 
 function systemPrompt() {
-  const body =
-    state.transcript?.timestampedText || state.transcript?.text || '(empty)';
+  const hasTranscript = Boolean(state.transcript);
   const hasTimestamps = state.transcript?.source === 'api';
   const strict = els.strictMode.classList.contains('active');
   const common = [
-    'Ты — помощник-репетитор по лекции Udemy.',
-    'ВАЖНО: всегда отвечай ТОЛЬКО на русском языке, независимо от языка транскрипта.',
-    'Отвечай кратко и по делу. Используй короткие списки, когда это уместно.',
-    hasTimestamps
-      ? 'Каждая строка транскрипта начинается с [таймкода] — ссылайся на них, когда это уместно.'
-      : '',
+    'Ты — помощник-репетитор по лекциям Udemy.',
+    'ВАЖНО: всегда отвечай ТОЛЬКО на русском языке.',
+    'Отвечай кратко и по делу. Можешь использовать Markdown (заголовки, списки, **жирный**, `код`, блоки кода) для форматирования.',
   ];
+  if (!hasTranscript) {
+    return [
+      ...common,
+      'Транскрипт лекции не загружен. Отвечай как обычный эксперт по теме вопроса.',
+    ].join('\n');
+  }
   const modeLines = strict
     ? [
         'Строгий режим: используй ИСКЛЮЧИТЕЛЬНО текст транскрипта ниже как источник информации.',
         'Если в транскрипте нет ответа — честно скажи об этом и ничего не придумывай.',
       ]
     : [
-        'Транскрипт лекции ниже — это основной контекст, но ты можешь свободно использовать свои общие знания, чтобы дополнить, объяснить или ответить на смежные вопросы (например, по языку программирования из лекции).',
+        'Транскрипт лекции ниже — это основной контекст, но ты можешь свободно использовать свои общие знания, чтобы дополнить, объяснить или ответить на смежные вопросы.',
         'Если вопрос не про лекцию — отвечай как обычный эксперт. Если про лекцию — опирайся на транскрипт, но можешь расширять объяснения своим знанием.',
       ];
   return [
     ...common,
+    hasTimestamps
+      ? 'Каждая строка транскрипта начинается с [таймкода] — ссылайся на них, когда это уместно.'
+      : '',
     ...modeLines,
     '',
     `Название лекции: ${state.meta?.lectureTitle || 'Неизвестно'}`,
     '',
     '--- НАЧАЛО ТРАНСКРИПТА ---',
-    body,
+    state.transcript.timestampedText || state.transcript.text || '(empty)',
     '--- КОНЕЦ ТРАНСКРИПТА ---',
   ]
     .filter(Boolean)
@@ -205,16 +218,12 @@ async function callLLM(extraMessages) {
 }
 
 async function ask(question) {
-  if (!state.transcript) {
-    addMsg('error', 'Load a transcript first.');
-    return;
-  }
   addMsg('user', question);
   const pending = addMsg('assistant', '…');
-  enableChat(false);
+  setBusy(true);
   try {
     const answer = await callLLM([{ role: 'user', content: question }]);
-    pending.textContent = answer;
+    setMsgContent(pending, answer);
     state.history.push(
       { role: 'user', content: question },
       { role: 'assistant', content: answer }
@@ -223,14 +232,14 @@ async function ask(question) {
     pending.remove();
     addMsg('error', e.message);
   } finally {
-    enableChat(true);
+    setBusy(false);
   }
 }
 
 async function summarize() {
   if (!state.transcript) return;
   const prompt =
-    'Сделай краткое саммари этой лекции в виде 5–8 пунктов, охватывающих ключевые идеи. В конце — одна фраза с главным выводом.';
+    'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Используй Markdown для форматирования.';
   await ask(prompt);
 }
 

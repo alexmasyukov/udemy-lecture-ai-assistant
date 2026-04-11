@@ -41,8 +41,14 @@ body {
 }
 
 .actions { display: flex; gap: 6px; }
+.status { display: flex; align-items: center; gap: 6px; }
+.status-label {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
 .dot {
-  width: 8px; height: 8px; border-radius: 50%;
+  width: 6px; height: 6px; border-radius: 50%;
   background: var(--muted);
 }
 .dot.ok { background: var(--ok); }
@@ -287,18 +293,16 @@ body.transparent-assistant .msg.assistant {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 0 8px 8px;
+  padding: 6px 8px 8px;
   background: var(--panel);
 }
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 10px;
+  gap: 6px;
+  padding: 0;
   background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 11px;
+  border: none;
   color: var(--muted);
   font: inherit;
   font-size: 11px;
@@ -306,20 +310,31 @@ body.transparent-assistant .msg.assistant {
   white-space: nowrap;
   user-select: none;
 }
-.chip:hover { background: var(--panel-2); color: var(--text); }
-.chip.active {
-  background: rgba(124, 92, 255, 0.12);
-  border-color: rgba(124, 92, 255, 0.55);
-  color: var(--text);
+.chip:hover { color: var(--text); }
+.chip.active { color: var(--text); }
+.chip-radio {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 1px solid var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  flex-shrink: 0;
 }
-.chip-check {
-  display: inline-block;
-  width: 11px;
-  text-align: center;
-  font-size: 10px;
-  color: var(--muted);
+.chip-radio::before {
+  content: '✓';
+  font-size: 9px;
+  line-height: 1;
+  color: transparent;
 }
-.chip.active .chip-check { color: var(--accent-2); }
+.chip.active .chip-radio {
+  border-color: var(--accent-2);
+}
+.chip.active .chip-radio::before {
+  color: var(--accent-2);
+}
 .composer textarea {
   flex: 1;
   background: var(--panel-2);

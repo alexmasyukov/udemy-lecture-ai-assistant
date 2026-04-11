@@ -8,7 +8,10 @@
   </head>
   <body>
     <header class="topbar">
-      <span class="dot" id="status-dot"></span>
+      <div class="status">
+        <span class="dot" id="status-dot"></span>
+        <span class="status-label" id="status-label">LLM offline</span>
+      </div>
       <div class="actions">
         <button id="load-transcript" class="icon-btn text-btn" title="Reload lecture transcript">Reload lecture transcript</button>
         <div class="menu-wrap">
@@ -25,7 +28,11 @@
     <section id="settings-panel" class="settings hidden">
       <label>
         Base URL
-        <input id="baseUrl" type="text" placeholder="http://127.0.0.1:1234/v1" />
+        <div class="row">
+          <input id="baseUrl" type="text" placeholder="http://127.0.0.1:1234/v1" />
+          <button id="test-base-url" class="ghost" type="button">Test</button>
+        </div>
+        <span id="base-url-result" class="meta"></span>
       </label>
       <label>
         Model
@@ -48,7 +55,7 @@
       </label>
       <label class="check-row">
         <input id="transparentAssistant" type="checkbox" />
-        <span>Прозрачный фон у ответов нейросети</span>
+        <span>Transparent background for assistant messages</span>
       </label>
       <button id="save-settings" class="primary">Save</button>
     </section>
@@ -66,8 +73,8 @@
       </form>
       <div class="chip-bar">
         <button id="strict-mode" class="chip active" type="button" title="Отвечать только в рамках транскрипта лекции" aria-pressed="true">
-          <span class="chip-check">✓</span>
-          <span>use lecture context only</span>
+          <span class="chip-radio"></span>
+          <span>Use lecture context only</span>
         </button>
       </div>
     </section>

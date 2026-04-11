@@ -2,9 +2,12 @@ const $ = (sel) => document.querySelector(sel);
 
 const els = {
   statusDot: $('#status-dot'),
+  statusLabel: $('#status-label'),
   settingsToggle: $('#settings-toggle'),
   settingsPanel: $('#settings-panel'),
   baseUrl: $('#baseUrl'),
+  testBaseUrl: $('#test-base-url'),
+  baseUrlResult: $('#base-url-result'),
   model: $('#model'),
   reloadModels: $('#reload-models'),
   temperature: $('#temperature'),
@@ -110,6 +113,8 @@ function addMsg(role, text) {
 function setStatus(kind) {
   els.statusDot.classList.remove('ok', 'err');
   if (kind) els.statusDot.classList.add(kind);
+  els.statusLabel.textContent =
+    kind === 'ok' ? 'LLM connected' : kind === 'err' ? 'LLM offline' : 'LLM…';
 }
 
 function setBusy(busy) {
@@ -144,24 +149,38 @@ async function loadSettings() {
 }
 
 async function refreshModels() {
+  const baseUrl = (els.baseUrl.value.trim() || state.settings?.baseUrl || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
   els.model.innerHTML = '<option>loading…</option>';
-  const resp = await send('LLM_LIST_MODELS');
-  els.model.innerHTML = '';
-  if (!resp.ok) {
+  let models = [];
+  try {
+    const r = await fetch(`${baseUrl}/models`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    models = (j.data || []).map((m) => m.id);
+  } catch (e) {
     setStatus('err');
+    els.model.innerHTML = '';
     const opt = document.createElement('option');
-    opt.textContent = `error: ${resp.error}`;
+    opt.textContent = `error: ${e.message}`;
     els.model.appendChild(opt);
     return;
   }
-  setStatus('ok');
-  for (const id of resp.models) {
+  els.model.innerHTML = '';
+  if (!models.length) {
+    setStatus('err');
+    const opt = document.createElement('option');
+    opt.textContent = 'no models available';
+    els.model.appendChild(opt);
+    return;
+  }
+  for (const id of models) {
     const opt = document.createElement('option');
     opt.value = id;
     opt.textContent = id;
     if (id === state.settings.model) opt.selected = true;
     els.model.appendChild(opt);
   }
+  setStatus(els.model.value ? 'ok' : 'err');
 }
 
 async function saveSettings() {
@@ -178,6 +197,7 @@ async function saveSettings() {
   applyFontSizes();
   applyAppearance();
   addMsg('system', 'Settings saved');
+  refreshModels();
 }
 
 // ----- transcript -----
@@ -256,16 +276,24 @@ function systemPrompt() {
 
 async function streamChat({ messages, model, temperature, onDelta, signal }) {
   const url = `${state.settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, temperature, messages, stream: true }),
-    signal,
-  });
+  let r;
+  try {
+    r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, temperature, messages, stream: true }),
+      signal,
+    });
+  } catch (e) {
+    if (e.name !== 'AbortError') setStatus('err');
+    throw e;
+  }
   if (!r.ok) {
+    setStatus('err');
     const text = await r.text().catch(() => '');
     throw new Error(`LLM HTTP ${r.status}: ${text.slice(0, 300)}`);
   }
+  setStatus('ok');
   const reader = r.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -364,6 +392,25 @@ els.settingsToggle.addEventListener('click', () =>
   els.settingsPanel.classList.toggle('hidden')
 );
 els.saveSettings.addEventListener('click', saveSettings);
+els.testBaseUrl.addEventListener('click', async () => {
+  const url = (els.baseUrl.value.trim() || 'http://127.0.0.1:1234/v1').replace(/\/$/, '');
+  els.baseUrlResult.textContent = 'Testing…';
+  els.baseUrlResult.style.color = 'var(--muted)';
+  els.testBaseUrl.disabled = true;
+  try {
+    const r = await fetch(`${url}/models`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    const count = (j.data || []).length;
+    els.baseUrlResult.textContent = `OK · ${count} model${count === 1 ? '' : 's'}`;
+    els.baseUrlResult.style.color = 'var(--ok)';
+  } catch (e) {
+    els.baseUrlResult.textContent = `Failed: ${e.message}`;
+    els.baseUrlResult.style.color = 'var(--err)';
+  } finally {
+    els.testBaseUrl.disabled = false;
+  }
+});
 els.reloadModels.addEventListener('click', refreshModels);
 els.loadTranscript.addEventListener('click', loadTranscript);
 function closeMenu() {

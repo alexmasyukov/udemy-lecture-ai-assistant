@@ -2,6 +2,8 @@
 
 Chrome extension for working with Udemy lectures via a local LLM (LM Studio or any OpenAI-compatible endpoint). It extracts the transcript of the current lecture, summarizes it, and answers questions about it — or works as a plain chat when no transcript is loaded.
 
+![Udemy Lecture AI Assistant in action](screenshot.png)
+
 ## Features
 
 - Pulls the transcript via the official Udemy API (`/api-2.0/.../lectures/.../?fields[asset]=captions`) — does not depend on whether the on-page transcript panel is open.

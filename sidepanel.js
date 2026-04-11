@@ -393,12 +393,27 @@ els.strictMode.addEventListener('click', () => {
   chrome.storage.local.set({ strictMode: active });
 });
 
+function autoresizeInput() {
+  els.askInput.style.height = 'auto';
+  els.askInput.style.height = `${els.askInput.scrollHeight}px`;
+}
+
+els.askInput.addEventListener('input', autoresizeInput);
+
+els.askInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  if (e.altKey || e.shiftKey) return; // newline
+  e.preventDefault();
+  els.askForm.requestSubmit();
+});
+
 els.askForm.addEventListener('submit', (e) => {
   e.preventDefault();
   if (state.busy) return;
   const q = els.askInput.value.trim();
   if (!q) return;
   els.askInput.value = '';
+  autoresizeInput();
   ask(q);
   els.askInput.focus();
 });

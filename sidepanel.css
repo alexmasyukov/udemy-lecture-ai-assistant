@@ -260,9 +260,9 @@ body.transparent-assistant .msg.assistant {
   padding: 6px 8px;
   border-top: 1px solid var(--border);
   background: var(--panel);
-  align-items: center;
+  align-items: flex-end;
 }
-.composer input {
+.composer textarea {
   flex: 1;
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -271,8 +271,13 @@ body.transparent-assistant .msg.assistant {
   padding: 6px 10px;
   font: inherit;
   outline: none;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.4;
+  min-height: 32px;
+  max-height: calc(var(--chat-font) * 1.4 * 3 + 14px);
 }
-.composer input:focus { border-color: #3a4358; }
+.composer textarea:focus { border-color: #3a4358; }
 .send-btn {
   min-width: 90px;
   padding: 6px 16px;

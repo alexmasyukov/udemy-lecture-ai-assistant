@@ -36,21 +36,24 @@ Chrome extension for working with Udemy lectures via a local LLM (LM Studio or a
 
 1. Open a Udemy lecture: `https://www.udemy.com/course/.../learn/lecture/...`.
 2. Click the extension icon in the Chrome toolbar — the side panel opens on the right.
-3. Press **Reload transcript** — the extension pulls all cues via the API. Switching to another lecture reloads it automatically.
-4. Press **Summary** for an automatic summary, or just type a question in the field at the bottom.
-5. **Lecture context only** (top bar): when enabled, replies are strictly grounded in the transcript. When disabled, the model can freely bring in general knowledge.
-6. While a reply is streaming, the **Send** button becomes a **Stop** button — click it to abort.
-7. Click any `[mm:ss]` timestamp in an assistant reply to jump the Udemy player to that moment.
-8. **Clear chat** (top-left corner of the chat) wipes the conversation without touching the transcript.
+3. Top-left status indicator shows whether your local LLM is reachable: **LLM connected** when `/v1/models` returns at least one model, **LLM offline** otherwise.
+4. Press **Reload lecture transcript** — the extension pulls all cues via the API. Switching to another lecture reloads it automatically.
+5. Type any question in the composer at the bottom. **Enter** sends, **Alt/Shift+Enter** inserts a newline. The textarea grows up to three lines.
+6. Use the **Use lecture context only** checkbox below the composer (on by default) to keep replies strictly grounded in the transcript. Turn it off for free-form chat that draws on the model's general knowledge.
+7. The **▾ menu** in the top bar contains:
+   - **Summarize this lecture** — generates a summary; loads the transcript on demand if it is missing.
+   - **Clear chat history** — wipes the conversation (with a confirm prompt).
+8. While a reply is streaming, the **Send** button becomes a **Stop** button — click it to abort. Whatever was already streamed stays in the chat history.
+9. Click any `[mm:ss]` timestamp in an assistant reply to jump the Udemy player to that moment. Ranges like `[00:11, 00:20]` or `[01:23 - 01:30]` produce one clickable link per timestamp.
 
-Settings (⚙ in the top-right corner):
+Settings (⛭ in the top-right corner):
 
-- **Base URL** — OpenAI-compatible API endpoint.
-- **Model** — dropdown of models pulled from `/v1/models`. The ↻ button refreshes the list.
+- **Base URL** — OpenAI-compatible API endpoint. The **Test** button next to it pings `/v1/models` and reports `OK · N models` or the failure reason inline.
+- **Model** — dropdown of models pulled from `/v1/models`. The ↻ button refreshes the list using whatever URL is currently in the field (no need to save first).
 - **Temperature** — sampling temperature (defaults to `0.3`).
 - **UI font size** — interface font size (defaults to `13px`).
 - **Chat font size** — chat font size (defaults to `16px`).
-- **Transparent assistant background** — removes the bubble around assistant messages.
+- **Transparent background for assistant messages** — removes the bubble around assistant messages.
 
 ## Project layout
 

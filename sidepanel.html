@@ -10,10 +10,15 @@
     <header class="topbar">
       <span class="dot" id="status-dot"></span>
       <div class="actions">
-        <button id="load-transcript" class="icon-btn text-btn" title="Reload transcript">Reload transcript</button>
-        <button id="summarize" class="icon-btn text-btn" title="Summarize" disabled>Summary</button>
-        <button id="strict-mode" class="icon-btn text-btn active" title="Отвечать только в рамках транскрипта лекции" aria-pressed="true">Lecture context only</button>
-        <button id="settings-toggle" class="icon-btn" title="Settings">⚙</button>
+        <button id="load-transcript" class="icon-btn text-btn" title="Reload lecture transcript">Reload lecture transcript</button>
+        <div class="menu-wrap">
+          <button id="menu-toggle" class="icon-btn" title="More" aria-haspopup="true" aria-expanded="false">▾</button>
+          <div id="menu" class="menu hidden">
+            <a id="summarize" href="#" class="menu-item">Summarize this lecture</a>
+            <a id="clear-chat" href="#" class="menu-item">Clear chat history</a>
+          </div>
+        </div>
+        <button id="settings-toggle" class="icon-btn" title="Settings">⛭</button>
       </div>
     </header>
 
@@ -49,7 +54,6 @@
     </section>
 
     <section class="chat" id="chat">
-      <a id="clear-chat" class="clear-link" href="#" title="Clear chat">Clear chat</a>
       <div id="messages" class="messages"></div>
       <form id="ask-form" class="composer">
         <textarea
@@ -60,6 +64,12 @@
         <button id="ask-btn" class="send-btn" type="submit" title="Send">Send</button>
         <button id="stop-btn" class="stop-btn hidden" type="button" title="Остановить">■</button>
       </form>
+      <div class="chip-bar">
+        <button id="strict-mode" class="chip active" type="button" title="Отвечать только в рамках транскрипта лекции" aria-pressed="true">
+          <span class="chip-check">✓</span>
+          <span>use lecture context only</span>
+        </button>
+      </div>
     </section>
 
     <script src="vendor/marked.min.js"></script>

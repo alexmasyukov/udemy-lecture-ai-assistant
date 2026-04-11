@@ -55,7 +55,13 @@ body {
   border-radius: 6px;
   width: 28px; height: 28px;
   cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
+.icon-btn.text-btn { font-size: 12px; }
 .icon-btn:hover:not(:disabled) { background: var(--panel-2); }
 .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .icon-btn.active {
@@ -126,19 +132,34 @@ button.ghost:disabled { opacity: 0.45; cursor: not-allowed; }
   display: flex;
   flex-direction: column;
   min-height: 0;
-  position: relative;
 }
-.clear-link {
+.menu-wrap { position: relative; display: inline-block; }
+.menu {
   position: absolute;
-  top: 6px;
-  left: 10px;
-  z-index: 2;
-  font-size: 11px;
-  color: var(--muted);
-  text-decoration: underline;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 140px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.menu-item {
+  display: block;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: var(--text);
+  text-decoration: none;
   cursor: pointer;
 }
-.clear-link:hover { color: var(--text); }
+.menu-item:hover { background: #272e3e; }
+.menu-item.disabled {
+  color: var(--muted);
+  pointer-events: none;
+  opacity: 0.5;
+}
 .messages {
   flex: 1;
   overflow-y: auto;
@@ -257,11 +278,48 @@ body.transparent-assistant .msg.assistant {
 .composer {
   display: flex;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 6px 8px 4px;
   border-top: 1px solid var(--border);
   background: var(--panel);
   align-items: flex-end;
 }
+.chip-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px 8px;
+  background: var(--panel);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+}
+.chip:hover { background: var(--panel-2); color: var(--text); }
+.chip.active {
+  background: rgba(124, 92, 255, 0.12);
+  border-color: rgba(124, 92, 255, 0.55);
+  color: var(--text);
+}
+.chip-check {
+  display: inline-block;
+  width: 11px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--muted);
+}
+.chip.active .chip-check { color: var(--accent-2); }
 .composer textarea {
   flex: 1;
   background: var(--panel-2);

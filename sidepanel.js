@@ -15,6 +15,8 @@ const els = {
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
   clearChat: $('#clear-chat'),
+  menuToggle: $('#menu-toggle'),
+  menu: $('#menu'),
   stopBtn: $('#stop-btn'),
   strictMode: $('#strict-mode'),
   messages: $('#messages'),
@@ -114,7 +116,7 @@ function setBusy(busy) {
   state.busy = busy;
   els.askBtn.classList.toggle('hidden', busy);
   els.stopBtn.classList.toggle('hidden', !busy);
-  els.summarize.disabled = busy || !state.transcript;
+  els.summarize.classList.toggle('disabled', busy);
 }
 
 // ----- settings -----
@@ -347,7 +349,10 @@ async function ask(question) {
 }
 
 async function summarize() {
-  if (!state.transcript) return;
+  if (!state.transcript) {
+    await loadTranscript();
+    if (!state.transcript) return;
+  }
   const prompt =
     'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Используй Markdown для форматирования.';
   await ask(prompt);
@@ -361,12 +366,33 @@ els.settingsToggle.addEventListener('click', () =>
 els.saveSettings.addEventListener('click', saveSettings);
 els.reloadModels.addEventListener('click', refreshModels);
 els.loadTranscript.addEventListener('click', loadTranscript);
-els.summarize.addEventListener('click', summarize);
+function closeMenu() {
+  els.menu.classList.add('hidden');
+  els.menuToggle.setAttribute('aria-expanded', 'false');
+}
+
+els.menuToggle.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = els.menu.classList.toggle('hidden');
+  els.menuToggle.setAttribute('aria-expanded', String(!open));
+});
+document.addEventListener('click', (e) => {
+  if (!els.menu.contains(e.target) && e.target !== els.menuToggle) closeMenu();
+});
+
+els.summarize.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (els.summarize.classList.contains('disabled')) return;
+  closeMenu();
+  summarize();
+});
 els.stopBtn.addEventListener('click', () => {
   state.abortController?.abort();
 });
 els.clearChat.addEventListener('click', (e) => {
   e.preventDefault();
+  closeMenu();
+  if (!confirm('Точно удалить историю чата?')) return;
   state.abortController?.abort();
   state.history = [];
   els.messages.innerHTML = '';

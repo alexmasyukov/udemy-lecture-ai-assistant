@@ -9,12 +9,9 @@ const els = {
   reloadModels: $('#reload-models'),
   temperature: $('#temperature'),
   saveSettings: $('#save-settings'),
-  lectureTitle: $('#lecture-title'),
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
-  captionLocale: $('#caption-locale'),
   strictMode: $('#strict-mode'),
-  transcriptMeta: $('#transcript-meta'),
   messages: $('#messages'),
   askForm: $('#ask-form'),
   askInput: $('#ask-input'),
@@ -79,24 +76,6 @@ function enableChat(enabled) {
   els.summarize.disabled = !enabled;
 }
 
-function populateCaptionLocales(transcript) {
-  const list = transcript?.availableCaptions || [];
-  if (!list.length) {
-    els.captionLocale.disabled = true;
-    return;
-  }
-  const current = transcript.locale;
-  els.captionLocale.innerHTML = '';
-  for (const c of list) {
-    const opt = document.createElement('option');
-    opt.value = c.locale_id;
-    opt.textContent = `${c.label}${c.source === 'manual' ? '' : ' [auto]'}`;
-    if (c.locale_id === current) opt.selected = true;
-    els.captionLocale.appendChild(opt);
-  }
-  els.captionLocale.disabled = false;
-}
-
 // ----- settings -----
 
 async function loadSettings() {
@@ -148,31 +127,25 @@ async function loadTranscript() {
     return;
   }
   els.loadTranscript.disabled = true;
-  els.loadTranscript.textContent = 'Loading…';
   state.transcript = null;
   state.meta = null;
   try {
-    const preferredLocale = els.captionLocale.value || undefined;
-    const resp = await sendToTab(tab.id, {
-      type: 'GET_TRANSCRIPT',
-      preferredLocale,
-    });
+    const resp = await sendToTab(tab.id, { type: 'GET_TRANSCRIPT' });
     if (!resp?.ok) throw new Error(resp?.error || 'no response from content script');
     state.transcript = resp.transcript;
     state.meta = resp.meta;
-    els.lectureTitle.textContent = resp.meta.lectureTitle || 'Lecture';
-    populateCaptionLocales(resp.transcript);
     const t = resp.transcript;
     const localeStr = t.captionLabel ? ` · ${t.captionLabel}` : '';
-    els.transcriptMeta.textContent =
-      `${t.source.toUpperCase()}${localeStr} · ${t.cues.length} cues · ${t.text.length.toLocaleString()} chars · lecture ${resp.meta.lectureId || '?'}`;
-    addMsg('system', `Транскрипт загружен (${t.source}${localeStr}). Задай вопрос или нажми Summarize.`);
+    const title = resp.meta.lectureTitle || 'Lecture';
+    addMsg(
+      'system',
+      `${title} — ${t.source.toUpperCase()}${localeStr} · ${t.cues.length} cues · ${t.text.length.toLocaleString()} chars · lecture ${resp.meta.lectureId || '?'}`
+    );
     enableChat(true);
   } catch (e) {
     addMsg('error', `Could not load transcript: ${e.message}`);
   } finally {
     els.loadTranscript.disabled = false;
-    els.loadTranscript.textContent = 'Load transcript';
   }
 }
 
@@ -182,7 +155,7 @@ function systemPrompt() {
   const body =
     state.transcript?.timestampedText || state.transcript?.text || '(empty)';
   const hasTimestamps = state.transcript?.source === 'api';
-  const strict = els.strictMode.checked;
+  const strict = els.strictMode.classList.contains('active');
   const common = [
     'Ты — помощник-репетитор по лекции Udemy.',
     'ВАЖНО: всегда отвечай ТОЛЬКО на русском языке, независимо от языка транскрипта.',
@@ -270,11 +243,10 @@ els.saveSettings.addEventListener('click', saveSettings);
 els.reloadModels.addEventListener('click', refreshModels);
 els.loadTranscript.addEventListener('click', loadTranscript);
 els.summarize.addEventListener('click', summarize);
-els.captionLocale.addEventListener('change', () => {
-  if (state.transcript) loadTranscript();
-});
-els.strictMode.addEventListener('change', () => {
-  chrome.storage.local.set({ strictMode: els.strictMode.checked });
+els.strictMode.addEventListener('click', () => {
+  const active = els.strictMode.classList.toggle('active');
+  els.strictMode.setAttribute('aria-pressed', String(active));
+  chrome.storage.local.set({ strictMode: active });
 });
 
 els.askForm.addEventListener('submit', (e) => {
@@ -285,26 +257,14 @@ els.askForm.addEventListener('submit', (e) => {
   ask(q);
 });
 
-els.askInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    els.askForm.requestSubmit();
-  }
-});
-
 (async function init() {
   await loadSettings();
   const stored = await chrome.storage.local.get(['strictMode']);
-  els.strictMode.checked = Boolean(stored.strictMode);
+  const strict = stored.strictMode ?? true;
+  els.strictMode.classList.toggle('active', strict);
+  els.strictMode.setAttribute('aria-pressed', String(strict));
   const tab = await getActiveUdemyTab();
-  if (tab) {
-    try {
-      const resp = await sendToTab(tab.id, { type: 'GET_LECTURE_META' });
-      if (resp?.ok) els.lectureTitle.textContent = resp.meta.lectureTitle || 'Lecture';
-    } catch {
-      // content script not yet injected on this tab
-    }
-  } else {
-    addMsg('system', 'Open a Udemy lecture and click Load transcript.');
+  if (!tab) {
+    addMsg('system', 'Open a Udemy lecture and click ↻.');
   }
 })();

@@ -14,6 +14,7 @@ const els = {
   saveSettings: $('#save-settings'),
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
+  stopBtn: $('#stop-btn'),
   strictMode: $('#strict-mode'),
   messages: $('#messages'),
   askForm: $('#ask-form'),
@@ -27,6 +28,7 @@ const state = {
   history: [],
   settings: null,
   busy: false,
+  abortController: null,
 };
 
 // ----- helpers -----
@@ -62,9 +64,32 @@ async function sendToTab(tabId, message) {
 
 marked.setOptions({ gfm: true, breaks: true });
 
+const TS_TOKEN = /\d{1,2}:\d{2}(?::\d{2})?/;
+const TS_BLOCK = /\[(\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[,\-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)*\s*)\]/g;
+
+function tsToSeconds(ts) {
+  const parts = ts.split(':').map(Number);
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return parts[0] * 60 + parts[1];
+}
+
+function wrapTs(ts) {
+  return `<a href="#" class="ts-link" data-seek="${tsToSeconds(ts)}">${ts}</a>`;
+}
+
+function linkifyTimestamps(html) {
+  return html.replace(TS_BLOCK, (_, inner) => {
+    const parts = inner.split(/(\s*[,\-–—]\s*)/);
+    const rebuilt = parts
+      .map((p) => (TS_TOKEN.test(p) && /^\d/.test(p) ? wrapTs(p) : p))
+      .join('');
+    return `[${rebuilt}]`;
+  });
+}
+
 function setMsgContent(div, text) {
   if (div.classList.contains('assistant')) {
-    div.innerHTML = marked.parse(text || '');
+    div.innerHTML = linkifyTimestamps(marked.parse(text || ''));
   } else {
     div.textContent = text;
   }
@@ -86,7 +111,8 @@ function setStatus(kind) {
 
 function setBusy(busy) {
   state.busy = busy;
-  els.askBtn.disabled = busy;
+  els.askBtn.classList.toggle('hidden', busy);
+  els.stopBtn.classList.toggle('hidden', !busy);
   els.summarize.disabled = busy || !state.transcript;
 }
 
@@ -225,12 +251,13 @@ function systemPrompt() {
     .join('\n');
 }
 
-async function streamChat({ messages, model, temperature, onDelta }) {
+async function streamChat({ messages, model, temperature, onDelta, signal }) {
   const url = `${state.settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, temperature, messages, stream: true }),
+    signal,
   });
   if (!r.ok) {
     const text = await r.text().catch(() => '');
@@ -269,33 +296,50 @@ async function streamChat({ messages, model, temperature, onDelta }) {
 async function ask(question) {
   addMsg('user', question);
   const pending = addMsg('assistant', '…');
+  const controller = new AbortController();
+  state.abortController = controller;
   setBusy(true);
+  let collected = '';
   try {
     const messages = [
       { role: 'system', content: systemPrompt() },
       ...state.history,
       { role: 'user', content: question },
     ];
-    const answer = await streamChat({
+    collected = await streamChat({
       messages,
       model: els.model.value || state.settings.model,
       temperature: parseFloat(els.temperature.value) || state.settings.temperature,
+      signal: controller.signal,
       onDelta: (content) => {
+        collected = content;
         const atBottom =
           els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 40;
         setMsgContent(pending, content);
         if (atBottom) els.messages.scrollTop = els.messages.scrollHeight;
       },
     });
-    if (!answer) setMsgContent(pending, '(empty response)');
+    if (!collected) setMsgContent(pending, '(empty response)');
     state.history.push(
       { role: 'user', content: question },
-      { role: 'assistant', content: answer }
+      { role: 'assistant', content: collected }
     );
   } catch (e) {
-    pending.remove();
-    addMsg('error', e.message);
+    if (e.name === 'AbortError') {
+      if (collected) {
+        state.history.push(
+          { role: 'user', content: question },
+          { role: 'assistant', content: collected }
+        );
+      } else {
+        pending.remove();
+      }
+    } else {
+      pending.remove();
+      addMsg('error', e.message);
+    }
   } finally {
+    state.abortController = null;
     setBusy(false);
     els.askInput.focus();
   }
@@ -317,6 +361,24 @@ els.saveSettings.addEventListener('click', saveSettings);
 els.reloadModels.addEventListener('click', refreshModels);
 els.loadTranscript.addEventListener('click', loadTranscript);
 els.summarize.addEventListener('click', summarize);
+els.stopBtn.addEventListener('click', () => {
+  state.abortController?.abort();
+});
+els.messages.addEventListener('click', async (e) => {
+  const link = e.target.closest('a.ts-link');
+  if (!link) return;
+  e.preventDefault();
+  const seconds = parseFloat(link.dataset.seek);
+  if (!Number.isFinite(seconds)) return;
+  const tab = await getActiveUdemyTab();
+  if (!tab) return;
+  try {
+    await sendToTab(tab.id, { type: 'SEEK_TO', seconds });
+  } catch (err) {
+    addMsg('error', `Seek failed: ${err.message}`);
+  }
+});
+
 els.strictMode.addEventListener('click', () => {
   const active = els.strictMode.classList.toggle('active');
   els.strictMode.setAttribute('aria-pressed', String(active));

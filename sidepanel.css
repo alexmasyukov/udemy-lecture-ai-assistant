@@ -221,6 +221,11 @@ body.transparent-assistant .msg.assistant {
   color: var(--accent-2);
   text-decoration: underline;
 }
+.msg.assistant a.ts-link {
+  color: var(--accent-2);
+  text-decoration: underline;
+  cursor: pointer;
+}
 .msg.assistant strong { font-weight: 700; }
 .msg.assistant em { font-style: italic; }
 .msg.error {
@@ -269,3 +274,17 @@ body.transparent-assistant .msg.assistant {
 }
 .send-btn:hover:not(:disabled) { background: #272e3e; }
 .send-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.stop-btn {
+  min-width: 90px;
+  padding: 6px 16px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+}
+.stop-btn:hover { background: #272e3e; color: var(--err); }
+.hidden { display: none !important; }

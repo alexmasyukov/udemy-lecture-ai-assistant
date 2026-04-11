@@ -206,4 +206,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     sendResponse({ ok: true, meta: getLectureMeta() });
     return false;
   }
+  if (msg?.type === 'SEEK_TO') {
+    const video = document.querySelector('video');
+    if (video && Number.isFinite(msg.seconds)) {
+      video.currentTime = msg.seconds;
+      video.play?.().catch(() => {});
+      sendResponse({ ok: true });
+    } else {
+      sendResponse({ ok: false, error: 'no video element' });
+    }
+    return false;
+  }
 });

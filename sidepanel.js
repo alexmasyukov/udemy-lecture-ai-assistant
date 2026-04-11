@@ -8,6 +8,8 @@ const els = {
   model: $('#model'),
   reloadModels: $('#reload-models'),
   temperature: $('#temperature'),
+  uiFontSize: $('#uiFontSize'),
+  chatFontSize: $('#chatFontSize'),
   saveSettings: $('#save-settings'),
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
@@ -56,9 +58,11 @@ async function sendToTab(tabId, message) {
   return chrome.tabs.sendMessage(tabId, message);
 }
 
+marked.setOptions({ gfm: true, breaks: true });
+
 function setMsgContent(div, text) {
   if (div.classList.contains('assistant')) {
-    div.innerHTML = window.renderMarkdown(text);
+    div.innerHTML = marked.parse(text || '');
   } else {
     div.textContent = text;
   }
@@ -86,11 +90,19 @@ function setBusy(busy) {
 
 // ----- settings -----
 
+function applyFontSizes() {
+  document.documentElement.style.setProperty('--ui-font', `${state.settings.uiFontSize}px`);
+  document.documentElement.style.setProperty('--chat-font', `${state.settings.chatFontSize}px`);
+}
+
 async function loadSettings() {
   const resp = await send('GET_SETTINGS');
   state.settings = resp.settings;
   els.baseUrl.value = state.settings.baseUrl;
   els.temperature.value = state.settings.temperature;
+  els.uiFontSize.value = state.settings.uiFontSize;
+  els.chatFontSize.value = state.settings.chatFontSize;
+  applyFontSizes();
   await refreshModels();
 }
 
@@ -120,9 +132,12 @@ async function saveSettings() {
     baseUrl: els.baseUrl.value.trim() || 'http://127.0.0.1:1234/v1',
     model: els.model.value,
     temperature: parseFloat(els.temperature.value) || 0.3,
+    uiFontSize: parseInt(els.uiFontSize.value, 10) || 13,
+    chatFontSize: parseInt(els.chatFontSize.value, 10) || 16,
   };
   await send('SAVE_SETTINGS', { settings: next });
   state.settings = next;
+  applyFontSizes();
   addMsg('system', 'Settings saved');
 }
 
@@ -200,21 +215,45 @@ function systemPrompt() {
     .join('\n');
 }
 
-async function callLLM(extraMessages) {
-  const messages = [
-    { role: 'system', content: systemPrompt() },
-    ...state.history,
-    ...extraMessages,
-  ];
-  const resp = await send('LLM_CHAT', {
-    payload: {
-      messages,
-      model: els.model.value || state.settings.model,
-      temperature: parseFloat(els.temperature.value) || state.settings.temperature,
-    },
+async function streamChat({ messages, model, temperature, onDelta }) {
+  const url = `${state.settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
+  const r = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model, temperature, messages, stream: true }),
   });
-  if (!resp.ok) throw new Error(resp.error);
-  return resp.content;
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    throw new Error(`LLM HTTP ${r.status}: ${text.slice(0, 300)}`);
+  }
+  const reader = r.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (data === '[DONE]') return content;
+      try {
+        const json = JSON.parse(data);
+        const delta = json.choices?.[0]?.delta?.content;
+        if (delta) {
+          content += delta;
+          onDelta(content);
+        }
+      } catch {
+        /* keep going — partial JSON, rarely happens with line-based SSE */
+      }
+    }
+  }
+  return content;
 }
 
 async function ask(question) {
@@ -222,8 +261,23 @@ async function ask(question) {
   const pending = addMsg('assistant', '…');
   setBusy(true);
   try {
-    const answer = await callLLM([{ role: 'user', content: question }]);
-    setMsgContent(pending, answer);
+    const messages = [
+      { role: 'system', content: systemPrompt() },
+      ...state.history,
+      { role: 'user', content: question },
+    ];
+    const answer = await streamChat({
+      messages,
+      model: els.model.value || state.settings.model,
+      temperature: parseFloat(els.temperature.value) || state.settings.temperature,
+      onDelta: (content) => {
+        const atBottom =
+          els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 40;
+        setMsgContent(pending, content);
+        if (atBottom) els.messages.scrollTop = els.messages.scrollHeight;
+      },
+    });
+    if (!answer) setMsgContent(pending, '(empty response)');
     state.history.push(
       { role: 'user', content: question },
       { role: 'assistant', content: answer }

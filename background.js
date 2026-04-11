@@ -10,6 +10,8 @@ const DEFAULTS = {
   baseUrl: 'http://127.0.0.1:1234/v1',
   model: 'gemma-4-e4b-it',
   temperature: 0.3,
+  uiFontSize: 13,
+  chatFontSize: 16,
 };
 
 async function getSettings() {

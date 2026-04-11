@@ -12,7 +12,10 @@ Chrome extension for working with Udemy lectures via a local LLM (LM Studio or a
 - If the content script has not been injected into the tab yet, the side panel injects it on demand via `chrome.scripting.executeScript`.
 - Timestamps are passed into the system prompt so the model can cite `[mm:ss]`.
 - Streaming responses: tokens appear as they are generated (SSE, just like ChatGPT).
+- The **Send** button turns into a **Stop** button while a reply is streaming, so you can abort a long answer at any point. Whatever was already generated stays in the chat history.
 - Assistant replies are rendered as Markdown via vendored `marked.js` (GFM: tables, code, lists, etc.).
+- **Clickable timestamps**: when the model writes `[mm:ss]` or `[hh:mm:ss]` — including ranges like `[00:11, 00:20]` or `[01:23 - 01:30]` — each timestamp becomes a link that seeks the Udemy player to that moment. Works even on DRM-protected videos because it only sets `video.currentTime`, no pixel access required.
+- **Clear chat** link in the top-left corner of the chat area — wipes the conversation (and the model context) without touching the loaded transcript.
 - **Summary** button — the model picks its own structure and length.
 - Free chat works even without a loaded transcript.
 - **Lecture context only** toggle (on by default) — strict mode, answers come only from the transcript. Turn it off to ask general questions that the model answers from its own knowledge.
@@ -36,6 +39,9 @@ Chrome extension for working with Udemy lectures via a local LLM (LM Studio or a
 3. Press **Reload transcript** — the extension pulls all cues via the API. Switching to another lecture reloads it automatically.
 4. Press **Summary** for an automatic summary, or just type a question in the field at the bottom.
 5. **Lecture context only** (top bar): when enabled, replies are strictly grounded in the transcript. When disabled, the model can freely bring in general knowledge.
+6. While a reply is streaming, the **Send** button becomes a **Stop** button — click it to abort.
+7. Click any `[mm:ss]` timestamp in an assistant reply to jump the Udemy player to that moment.
+8. **Clear chat** (top-left corner of the chat) wipes the conversation without touching the transcript.
 
 Settings (⚙ in the top-right corner):
 

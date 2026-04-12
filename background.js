@@ -2,9 +2,24 @@
 // requests so the side panel doesn't talk to localhost directly (cleaner CORS
 // + future-proof if we add Anthropic/OpenAI cloud later).
 
+const UDEMY_LECTURE = /udemy\.com\/course\/.*\/learn\/lecture\//;
+
+// Per-tab side panel: no default_path in manifest, no auto-open.
+// Chrome automatically hides the panel when switching tabs and restores
+// it (with preserved DOM state) when the user comes back.
 chrome.sidePanel
-  .setPanelBehavior({ openPanelOnActionClick: true })
+  .setPanelBehavior({ openPanelOnActionClick: false })
   .catch(() => {});
+
+chrome.action.onClicked.addListener((tab) => {
+  if (!tab.id || !UDEMY_LECTURE.test(tab.url || '')) return;
+  chrome.sidePanel.setOptions({
+    tabId: tab.id,
+    path: 'sidepanel.html',
+    enabled: true,
+  });
+  chrome.sidePanel.open({ tabId: tab.id });
+});
 
 const DEFAULTS = {
   baseUrl: 'http://127.0.0.1:1234/v1',

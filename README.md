@@ -22,6 +22,7 @@ Chrome extension for working with Udemy lectures via a local LLM (LM Studio or a
 - Configurable UI and chat font sizes.
 - Optional transparent background for assistant replies.
 - Local model via OpenAI-compatible API (defaults to LM Studio at `http://127.0.0.1:1234/v1`).
+- **Per-tab side panel**: the panel is scoped to the tab where you opened it. Switch to another tab — it hides. Come back — it reappears with state preserved (same approach as Claude for Chrome).
 - DOM fallback that scrapes the on-page transcript panel if the API path fails.
 
 ## Installation

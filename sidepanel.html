@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Udemy Lecture AI</title>
     <link rel="stylesheet" href="sidepanel.css" />
+    <link rel="stylesheet" href="vendor/highlight-github-dark.min.css" />
   </head>
   <body>
     <header class="topbar">
@@ -13,11 +14,12 @@
         <span class="status-label" id="status-label">LLM offline</span>
       </div>
       <div class="actions">
+        <button id="summarize" class="icon-btn text-btn" title="Summarize this lecture">Summarize it</button>
         <button id="load-transcript" class="icon-btn text-btn" title="Reload lecture transcript">Reload lecture transcript</button>
         <div class="menu-wrap">
           <button id="menu-toggle" class="icon-btn" title="More" aria-haspopup="true" aria-expanded="false">▾</button>
           <div id="menu" class="menu hidden">
-            <a id="summarize" href="#" class="menu-item">Summarize this lecture</a>
+            <a id="summarize-examples" href="#" class="menu-item">Summary with examples</a>
             <a id="clear-chat" href="#" class="menu-item">Clear chat history</a>
           </div>
         </div>
@@ -79,6 +81,7 @@
       </div>
     </section>
 
+    <script src="vendor/highlight.min.js"></script>
     <script src="vendor/marked.min.js"></script>
     <script src="sidepanel.js"></script>
   </body>

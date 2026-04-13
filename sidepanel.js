@@ -17,6 +17,7 @@ const els = {
   saveSettings: $('#save-settings'),
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
+  summarizeExamples: $('#summarize-examples'),
   clearChat: $('#clear-chat'),
   menuToggle: $('#menu-toggle'),
   menu: $('#menu'),
@@ -68,7 +69,22 @@ async function sendToTab(tabId, message) {
   return chrome.tabs.sendMessage(tabId, message);
 }
 
-marked.setOptions({ gfm: true, breaks: true });
+marked.setOptions({
+  gfm: true,
+  breaks: true,
+});
+
+const renderer = new marked.Renderer();
+const origCode = renderer.code.bind(renderer);
+renderer.code = function ({ text, lang }) {
+  const language = lang && hljs.getLanguage(lang) ? lang : null;
+  const highlighted = language
+    ? hljs.highlight(text, { language }).value
+    : hljs.highlightAuto(text).value;
+  const cls = language ? ` class="language-${language}"` : '';
+  return `<pre><code${cls}>${highlighted}</code></pre>`;
+};
+marked.setOptions({ renderer });
 
 const TS_TOKEN = /\d{1,2}:\d{2}(?::\d{2})?/;
 const TS_BLOCK = /\[(\s*\d{1,2}:\d{2}(?::\d{2})?(?:\s*[,\-–—]\s*\d{1,2}:\d{2}(?::\d{2})?)*\s*)\]/g;
@@ -121,7 +137,8 @@ function setBusy(busy) {
   state.busy = busy;
   els.askBtn.classList.toggle('hidden', busy);
   els.stopBtn.classList.toggle('hidden', !busy);
-  els.summarize.classList.toggle('disabled', busy);
+  els.summarize.disabled = busy;
+  els.summarizeExamples.classList.toggle('disabled', busy);
 }
 
 // ----- settings -----
@@ -324,7 +341,7 @@ async function streamChat({ messages, model, temperature, onDelta, signal }) {
   return content;
 }
 
-async function ask(question) {
+async function ask(question, { skipHistory = false } = {}) {
   addMsg('user', question);
   const pending = addMsg('assistant', '…');
   const controller = new AbortController();
@@ -334,7 +351,7 @@ async function ask(question) {
   try {
     const messages = [
       { role: 'system', content: systemPrompt() },
-      ...state.history,
+      ...(skipHistory ? [] : state.history),
       { role: 'user', content: question },
     ];
     collected = await streamChat({
@@ -383,7 +400,17 @@ async function summarize() {
   }
   const prompt =
     'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Используй Markdown для форматирования.';
-  await ask(prompt);
+  await ask(prompt, { skipHistory: true });
+}
+
+async function summarizeWithExamples() {
+  if (!state.transcript) {
+    await loadTranscript();
+    if (!state.transcript) return;
+  }
+  const prompt =
+    'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Для каждой ключевой концепции приведи короткий рабочий пример на том языке программирования, о котором идёт речь в лекции. Примеры должны быть самодостаточными и демонстрировать именно тот момент, который обсуждается. Используй Markdown для форматирования.';
+  await ask(prompt, { skipHistory: true });
 }
 
 // ----- init -----
@@ -427,11 +454,15 @@ document.addEventListener('click', (e) => {
   if (!els.menu.contains(e.target) && e.target !== els.menuToggle) closeMenu();
 });
 
-els.summarize.addEventListener('click', (e) => {
-  e.preventDefault();
-  if (els.summarize.classList.contains('disabled')) return;
-  closeMenu();
+els.summarize.addEventListener('click', () => {
+  if (state.busy) return;
   summarize();
+});
+els.summarizeExamples.addEventListener('click', (e) => {
+  e.preventDefault();
+  if (state.busy) return;
+  closeMenu();
+  summarizeWithExamples();
 });
 els.stopBtn.addEventListener('click', () => {
   state.abortController?.abort();

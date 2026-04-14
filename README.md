@@ -1,74 +1,92 @@
-# Udemy Lecture AI Assistant (local LLM)
+# Udemy Lecture AI Assistant
 
-Chrome extension for working with Udemy lectures via a local LLM (LM Studio or any OpenAI-compatible endpoint). It extracts the transcript of the current lecture, summarizes it, and answers questions about it — or works as a plain chat when no transcript is loaded.
+Chrome extension for working with Udemy lectures via an LLM — either a local OpenAI-compatible endpoint (LM Studio, llama.cpp, Ollama) or the OpenAI Cloud API. It extracts the transcript of the current lecture, summarizes it, and answers questions about it — or works as a plain chat when no transcript is loaded.
 
 ![Udemy Lecture AI Assistant in action](screenshot.png)
 
 ## Features
 
+### Transcript
 - Pulls the transcript via the official Udemy API (`/api-2.0/.../lectures/.../?fields[asset]=captions`) — does not depend on whether the on-page transcript panel is open.
 - Defaults to manual English captions; falls back to any English track, then manual, then the first available.
 - Automatically reloads the transcript on SPA navigation between lectures (via `chrome.webNavigation.onHistoryStateUpdated`).
 - If the content script has not been injected into the tab yet, the side panel injects it on demand via `chrome.scripting.executeScript`.
-- Timestamps are passed into the system prompt so the model can cite `[mm:ss]`.
-- Streaming responses: tokens appear as they are generated (SSE, just like ChatGPT).
+- DOM fallback that scrapes the on-page transcript panel if the API path fails.
+
+### LLM providers
+- **Local LLM** — any OpenAI-compatible endpoint (defaults to LM Studio at `http://127.0.0.1:1234/v1`). Model list is pulled from `/v1/models`.
+- **OpenAI Cloud** — API key stored in `chrome.storage.local`. The model dropdown is populated live from `/v1/models` filtered to chat-capable families.
+- Provider is switched with a radio in the Model tab; each provider has its own settings form and its own **Test** button that pings `/v1/models` and reports the result inline.
+- `reasoning_effort` is set automatically per OpenAI model family — `none` for `gpt-5.1+`, `low` for `gpt-5`/`o1`/`o3`/`o4`, and omitted for `gpt-4o`/`chatgpt-*` (which reject the parameter).
+
+### Chat
+- Streaming responses: tokens appear as they are generated (SSE, just like ChatGPT). Requests go **directly** from the side panel to the LLM, not through the service worker.
 - The **Send** button turns into a **Stop** button while a reply is streaming, so you can abort a long answer at any point. Whatever was already generated stays in the chat history.
 - Assistant replies are rendered as Markdown via vendored `marked.js` (GFM: tables, code, lists, etc.).
+- **Syntax highlighting** for fenced code blocks via vendored `highlight.js` with the GitHub Dark theme.
 - **Clickable timestamps**: when the model writes `[mm:ss]` or `[hh:mm:ss]` — including ranges like `[00:11, 00:20]` or `[01:23 - 01:30]` — each timestamp becomes a link that seeks the Udemy player to that moment. Works even on DRM-protected videos because it only sets `video.currentTime`, no pixel access required.
-- **Clear chat** link in the top-left corner of the chat area — wipes the conversation (and the model context) without touching the loaded transcript.
-- **Summary** button — the model picks its own structure and length.
+- **Use lecture context only** toggle (on by default) — strict mode, answers come only from the transcript. Turn it off to ask general questions that the model answers from its own knowledge.
 - Free chat works even without a loaded transcript.
-- **Lecture context only** toggle (on by default) — strict mode, answers come only from the transcript. Turn it off to ask general questions that the model answers from its own knowledge.
-- Configurable UI and chat font sizes.
-- Optional transparent background for assistant replies.
-- Local model via OpenAI-compatible API (defaults to LM Studio at `http://127.0.0.1:1234/v1`).
+
+### Summaries
+- **Summarize it** — top-bar button, uses the `summaryPrompt` from settings (defaults to a free-form Russian summary). Skips chat history so the KV cache stays hot.
+- **Summary with examples** — menu item, uses the `summaryExamplesPrompt` and asks the model to add a short runnable example for every key concept in the language the lecture is about.
+- Both commands auto-load the transcript if it is missing.
+
+### Settings (⛭ in the top-right corner)
+Three tabs:
+- **Model** — provider radio (Local / OpenAI Cloud) and the corresponding form. Each form has its own **Save** button.
+- **Prompts** — editable `Summarize it` and `Summary with examples` templates with **Reset to defaults** and per-form **Save**.
+- **UI** — UI font size, chat font size, and a toggle for a transparent background for assistant messages.
+
+### UX
 - **Per-tab side panel**: the panel is scoped to the tab where you opened it. Switch to another tab — it hides. Come back — it reappears with state preserved (same approach as Claude for Chrome).
-- DOM fallback that scrapes the on-page transcript panel if the API path fails.
+- **Connection status** indicator in the top-left corner: **LLM connected** when `/v1/models` returns at least one model, **LLM offline** otherwise.
+- **Clear chat history** in the ▾ menu — wipes the conversation (and the model context) without touching the loaded transcript.
 
 ## Installation
 
 1. Clone this repository.
 2. Open `chrome://extensions/` and enable **Developer mode** (top-right corner).
 3. Click **Load unpacked** and select the extension folder.
-4. Launch [LM Studio](https://lmstudio.ai) and start the local server (**Developer → Start Server**). By default it listens on `127.0.0.1:1234`.
-5. Load any model (the extension ships with `gemma-4-e4b-it` as the default).
+4. **Local LLM path**: launch [LM Studio](https://lmstudio.ai) and start the local server (**Developer → Start Server**). By default it listens on `127.0.0.1:1234`. Load any model.
+5. **OpenAI Cloud path**: open settings → Model → pick **OpenAI Cloud**, paste your API key, hit **Test**, pick a model, **Save**.
 
 ## Usage
 
 1. Open a Udemy lecture: `https://www.udemy.com/course/.../learn/lecture/...`.
-2. Click the extension icon in the Chrome toolbar — the side panel opens on the right.
-3. Top-left status indicator shows whether your local LLM is reachable: **LLM connected** when `/v1/models` returns at least one model, **LLM offline** otherwise.
-4. Press **Reload lecture transcript** — the extension pulls all cues via the API. Switching to another lecture reloads it automatically.
-5. Type any question in the composer at the bottom. **Enter** sends, **Alt/Shift+Enter** inserts a newline. The textarea grows up to three lines.
-6. Use the **Use lecture context only** checkbox below the composer (on by default) to keep replies strictly grounded in the transcript. Turn it off for free-form chat that draws on the model's general knowledge.
-7. The **▾ menu** in the top bar contains:
-   - **Summarize this lecture** — generates a summary; loads the transcript on demand if it is missing.
-   - **Clear chat history** — wipes the conversation (with a confirm prompt).
-8. While a reply is streaming, the **Send** button becomes a **Stop** button — click it to abort. Whatever was already streamed stays in the chat history.
-9. Click any `[mm:ss]` timestamp in an assistant reply to jump the Udemy player to that moment. Ranges like `[00:11, 00:20]` or `[01:23 - 01:30]` produce one clickable link per timestamp.
-
-Settings (⛭ in the top-right corner):
-
-- **Base URL** — OpenAI-compatible API endpoint. The **Test** button next to it pings `/v1/models` and reports `OK · N models` or the failure reason inline.
-- **Model** — dropdown of models pulled from `/v1/models`. The ↻ button refreshes the list using whatever URL is currently in the field (no need to save first).
-- **Temperature** — sampling temperature (defaults to `0.3`).
-- **UI font size** — interface font size (defaults to `13px`).
-- **Chat font size** — chat font size (defaults to `16px`).
-- **Transparent background for assistant messages** — removes the bubble around assistant messages.
+2. Click the extension icon in the Chrome toolbar — the side panel opens on the right, scoped to that tab.
+3. Press **Reload lecture transcript** — the extension pulls all cues via the API. Switching to another lecture reloads it automatically.
+4. Type any question in the composer at the bottom. **Enter** sends, **Alt/Shift+Enter** inserts a newline. The textarea grows up to three lines.
+5. Use **Summarize it** in the top bar for a free-form summary, or the **▾ menu → Summary with examples** to additionally get runnable code snippets.
+6. Use the **Use lecture context only** chip below the composer to toggle strict mode.
+7. While a reply is streaming, the **Send** button becomes a **Stop** button — click it to abort. Whatever was already streamed stays in the chat history.
+8. Click any `[mm:ss]` timestamp in an assistant reply to jump the Udemy player to that moment.
 
 ## Project layout
 
 ```
 .
 ├── manifest.json            # MV3 manifest
-├── background.js            # service worker: settings + /v1/models proxy
+├── background.js            # service worker: per-tab side panel wiring only
 ├── content.js               # reads courseId/lectureId, hits captions API, parses VTT
-├── sidepanel.html           # side panel UI
+├── sidepanel.html           # side panel UI (tabs: Model / Prompts / UI)
 ├── sidepanel.css            # dark theme, CSS variables for fonts
-├── sidepanel.js             # UI logic, streaming chat, history, settings
+├── sidepanel.js             # thin orchestrator: init + event wiring
+├── src/
+│   ├── defaults.js          # DEFAULTS + default prompts + OpenAI base URL
+│   ├── settings.js          # chrome.storage.local wrapper (load/patch)
+│   ├── providers.js         # local + openai provider objects, streamChat, testEndpoint
+│   ├── transcript.js        # getActiveUdemyTab, sendToTab, buildSystemPrompt
+│   ├── markdown.js          # marked + hljs config, timestamp linkifier
+│   └── ui.js                # els, addMsg, setStatus, setBusy, font/appearance
 └── vendor/
-    └── marked.min.js        # markdown → HTML (MIT)
+    ├── marked.min.js                  # markdown → HTML (MIT)
+    ├── highlight.min.js               # syntax highlighting (BSD-3-Clause)
+    └── highlight-github-dark.min.css  # code theme
 ```
+
+`sidepanel.js` is loaded as an ES module (`<script type="module">`) and imports from `src/`. `marked` and `hljs` are classic scripts loaded before it so they are available as globals when the modules execute.
 
 ## How the transcript is fetched
 
@@ -85,12 +103,12 @@ Settings (⛭ in the top-right corner):
 
 ## How the chat works
 
-Requests to the LLM (`/v1/chat/completions` with `stream: true`) are made **directly** from the side panel (host_permissions cover `127.0.0.1`), bypassing the service worker. The response is read via `ReadableStream.getReader()`, SSE lines (`data: {...}`) are parsed, and `choices[0].delta.content` is accumulated — the assistant bubble is re-rendered through `marked.parse()` on every chunk.
+Requests to the LLM (`/v1/chat/completions` with `stream: true`) are made **directly** from the side panel (host_permissions cover `127.0.0.1`, `localhost`, and `api.openai.com`), bypassing the service worker. The response is read via `ReadableStream.getReader()`, SSE lines (`data: {...}`) are parsed, and `choices[0].delta.content` is accumulated — the assistant bubble is re-rendered through `marked.parse()` on every chunk.
 
 Each request contains:
 
 - **system**: instructions plus the optional timestamped transcript.
-- **history**: previous user/assistant pairs from the current session.
+- **history**: previous user/assistant pairs from the current session (skipped for the two summary commands so the KV cache stays hot).
 - **user**: the new message.
 
 The chat history lives in memory inside the side panel and is **preserved** when switching between lectures — only the transcript in the system prompt changes. It is cleared when the panel is closed.

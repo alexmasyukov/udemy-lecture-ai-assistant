@@ -1,4 +1,7 @@
-import { OPENAI_BASE, LOCAL_BASE_FALLBACK } from './defaults.js';
+import { OPENAI_BASE, OPENROUTER_BASE, LOCAL_BASE_FALLBACK } from './defaults.js';
+
+const OPENROUTER_REFERER = 'https://github.com/alexmasyukov/udemy-lecture-ai-assistant';
+const OPENROUTER_TITLE = 'Udemy Lecture AI';
 
 function reasoningEffortFor(model) {
   // gpt-5.1, 5.2, 5.3, 5.4… accept full disable
@@ -73,7 +76,56 @@ export const openaiProvider = {
   },
 };
 
-export const providers = { local: localProvider, openai: openaiProvider };
+export const openrouterProvider = {
+  name: 'openrouter',
+  endpoint(settings) {
+    return {
+      base: OPENROUTER_BASE,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${settings.openrouterApiKey || ''}`,
+        'HTTP-Referer': OPENROUTER_REFERER,
+        'X-Title': OPENROUTER_TITLE,
+      },
+    };
+  },
+  buildBody({ model, messages, temperature }) {
+    // reasoning.effort = "none" disables thinking for every reasoning-capable
+    // model (Claude thinking, DeepSeek R1, Gemini Thinking, GPT-5, etc.).
+    // Non-reasoning models ignore it.
+    return {
+      model,
+      messages,
+      temperature,
+      stream: true,
+      reasoning: { effort: 'none' },
+    };
+  },
+  async listModels(settings) {
+    // Public endpoint — no key needed, but send it if we have one so
+    // routed variants (paid/free) stay consistent.
+    const headers = settings.openrouterApiKey
+      ? { Authorization: `Bearer ${settings.openrouterApiKey}` }
+      : {};
+    const r = await fetch(`${OPENROUTER_BASE}/models`, { headers });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const j = await r.json();
+    return (j.data || []).map((m) => ({
+      id: m.id,
+      label: m.name || m.id,
+      contextLength: m.context_length || 0,
+    }));
+  },
+  activeModel(settings) {
+    return settings.openrouterModel;
+  },
+};
+
+export const providers = {
+  local: localProvider,
+  openai: openaiProvider,
+  openrouter: openrouterProvider,
+};
 
 export function getProvider(settings) {
   return providers[settings.provider] || localProvider;

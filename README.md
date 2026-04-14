@@ -1,6 +1,6 @@
 # Udemy Lecture AI Assistant
 
-Chrome extension for working with Udemy lectures via an LLM — either a local OpenAI-compatible endpoint (LM Studio, llama.cpp, Ollama) or the OpenAI Cloud API. It extracts the transcript of the current lecture, summarizes it, and answers questions about it — or works as a plain chat when no transcript is loaded.
+Chrome extension for working with Udemy lectures via an LLM — a local OpenAI-compatible endpoint (LM Studio, llama.cpp, Ollama), the OpenAI Cloud API, or any of the 300+ models on OpenRouter (Claude, Gemini, Llama, Mistral, Qwen, DeepSeek, etc.). It extracts the transcript of the current lecture, summarizes it, and answers questions about it — or works as a plain chat when no transcript is loaded.
 
 ![Udemy Lecture AI Assistant in action](screenshot.png)
 
@@ -16,8 +16,10 @@ Chrome extension for working with Udemy lectures via an LLM — either a local O
 ### LLM providers
 - **Local LLM** — any OpenAI-compatible endpoint (defaults to LM Studio at `http://127.0.0.1:1234/v1`). Model list is pulled from `/v1/models`.
 - **OpenAI Cloud** — API key stored in `chrome.storage.local`. The model dropdown is populated live from `/v1/models` filtered to chat-capable families.
+- **OpenRouter** — one API key for 300+ models across all major providers. The model list is pulled from `/models`; above the dropdown there is a **Filter** input — type `claude`, `gpt`, `gemini`, `free`, or any substring of the model id/name, and the list rebuilds instantly. The currently saved model stays pinned at the top as a "(not in filter)" ghost entry even when hidden by the filter so you never lose it.
 - Provider is switched with a radio in the Model tab; each provider has its own settings form and its own **Test** button that pings `/v1/models` and reports the result inline.
 - `reasoning_effort` is set automatically per OpenAI model family — `none` for `gpt-5.1+`, `low` for `gpt-5`/`o1`/`o3`/`o4`, and omitted for `gpt-4o`/`chatgpt-*` (which reject the parameter).
+- For OpenRouter the request always carries `reasoning: { effort: "none" }`, which globally disables thinking for every reasoning-capable model (Claude thinking, DeepSeek R1, Gemini Thinking, GPT-5, etc.) so you get straight answers without the chain-of-thought overhead.
 
 ### Chat
 - Streaming responses: tokens appear as they are generated (SSE, just like ChatGPT). Requests go **directly** from the side panel to the LLM, not through the service worker.

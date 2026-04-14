@@ -40,24 +40,32 @@ const state = {
   settings: { ...DEFAULTS },
   busy: false,
   abortController: null,
+  openrouterModelsFull: [], // [{ id, label, contextLength }]
 };
 
 // ----- settings flow -----
 
 function currentProviderName() {
-  return els.providerOpenai.checked ? 'openai' : 'local';
+  if (els.providerOpenai.checked) return 'openai';
+  if (els.providerOpenrouter.checked) return 'openrouter';
+  return 'local';
 }
 
 function applyProviderUi() {
-  const isOpenai = currentProviderName() === 'openai';
-  els.localSettings.classList.toggle('hidden', isOpenai);
-  els.openaiSettings.classList.toggle('hidden', !isOpenai);
+  const name = currentProviderName();
+  els.localSettings.classList.toggle('hidden', name !== 'local');
+  els.openaiSettings.classList.toggle('hidden', name !== 'openai');
+  els.openrouterSettings.classList.toggle('hidden', name !== 'openrouter');
 }
 
 function updateProviderStatus() {
-  if (currentProviderName() === 'openai') {
+  const name = currentProviderName();
+  if (name === 'openai') {
     const hasKey = (els.openaiApiKey.value.trim() || state.settings.openaiApiKey || '').length > 0;
     setStatus(hasKey && els.modelOpenai.value ? 'ok' : 'err');
+  } else if (name === 'openrouter') {
+    const hasKey = (els.openrouterApiKey.value.trim() || state.settings.openrouterApiKey || '').length > 0;
+    setStatus(hasKey && els.modelOpenrouter.value ? 'ok' : 'err');
   } else {
     setStatus(els.modelLocal.value ? 'ok' : 'err');
   }
@@ -72,6 +80,7 @@ function readFormIntoSettings() {
     provider: currentProviderName(),
     baseUrl: els.baseUrl.value.trim() || DEFAULTS.baseUrl,
     openaiApiKey: els.openaiApiKey.value.trim(),
+    openrouterApiKey: els.openrouterApiKey.value.trim(),
     temperature: parseFloat(els.temperature.value) || state.settings.temperature,
   };
 }
@@ -114,14 +123,77 @@ async function refreshOpenaiModels() {
   }
 }
 
+function renderOpenrouterSelect() {
+  const query = els.openrouterFilter.value.trim().toLowerCase();
+  const words = query ? query.split(/\s+/) : [];
+  const full = state.openrouterModelsFull;
+  const filtered = words.length
+    ? full.filter((m) => {
+        const hay = `${m.id} ${m.label}`.toLowerCase();
+        return words.every((w) => hay.includes(w));
+      })
+    : full;
+  els.modelOpenrouter.innerHTML = '';
+  if (!filtered.length) {
+    const opt = document.createElement('option');
+    opt.textContent = full.length ? 'no matches' : 'no models loaded';
+    els.modelOpenrouter.appendChild(opt);
+  } else {
+    const selected = state.settings.openrouterModel;
+    for (const m of filtered) {
+      const opt = document.createElement('option');
+      opt.value = m.id;
+      opt.textContent = m.label;
+      if (m.id === selected) opt.selected = true;
+      els.modelOpenrouter.appendChild(opt);
+    }
+    // If the saved model isn't in the filtered set, prepend it as a
+    // "ghost" option so the user sees what's currently selected.
+    if (selected && !filtered.some((m) => m.id === selected)) {
+      const ghost = document.createElement('option');
+      ghost.value = selected;
+      ghost.textContent = `${selected} (not in filter)`;
+      ghost.selected = true;
+      els.modelOpenrouter.prepend(ghost);
+    }
+  }
+  els.openrouterModelCount.textContent = full.length
+    ? `${filtered.length} / ${full.length} models`
+    : '';
+}
+
+async function refreshOpenrouterModels() {
+  const snapshot = readFormIntoSettings();
+  els.modelOpenrouter.innerHTML = '<option>loading…</option>';
+  try {
+    const items = await providers.openrouter.listModels(snapshot);
+    state.openrouterModelsFull = items;
+    renderOpenrouterSelect();
+  } catch (e) {
+    state.openrouterModelsFull = [];
+    els.modelOpenrouter.innerHTML = '';
+    const opt = document.createElement('option');
+    opt.textContent = `error: ${e.message}`;
+    els.modelOpenrouter.appendChild(opt);
+    els.openrouterModelCount.textContent = '';
+  } finally {
+    updateProviderStatus();
+  }
+}
+
 async function refreshAllModels() {
-  await Promise.all([refreshLocalModels(), refreshOpenaiModels()]);
+  await Promise.all([
+    refreshLocalModels(),
+    refreshOpenaiModels(),
+    refreshOpenrouterModels(),
+  ]);
 }
 
 async function applySettings(settings) {
   state.settings = settings;
   els.baseUrl.value = settings.baseUrl;
   els.openaiApiKey.value = settings.openaiApiKey || '';
+  els.openrouterApiKey.value = settings.openrouterApiKey || '';
   els.temperature.value = settings.temperature;
   els.uiFontSize.value = settings.uiFontSize;
   els.chatFontSize.value = settings.chatFontSize;
@@ -130,6 +202,8 @@ async function applySettings(settings) {
   els.summaryExamplesPrompt.value = settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT;
   if (settings.provider === 'openai') {
     els.providerOpenai.checked = true;
+  } else if (settings.provider === 'openrouter') {
+    els.providerOpenrouter.checked = true;
   } else {
     els.providerLocal.checked = true;
   }
@@ -192,10 +266,10 @@ function systemPrompt() {
 }
 
 function activeModel() {
-  const isOpenai = currentProviderName() === 'openai';
-  return isOpenai
-    ? els.modelOpenai.value || state.settings.openaiModel
-    : els.modelLocal.value || state.settings.model;
+  const name = currentProviderName();
+  if (name === 'openai') return els.modelOpenai.value || state.settings.openaiModel;
+  if (name === 'openrouter') return els.modelOpenrouter.value || state.settings.openrouterModel;
+  return els.modelLocal.value || state.settings.model;
 }
 
 async function ask(question, { skipHistory = false } = {}) {
@@ -311,6 +385,17 @@ function wireSettingsForms() {
     await refreshOpenaiModels();
   });
 
+  els.saveOpenrouter.addEventListener('click', async () => {
+    await savePatch(
+      {
+        openrouterApiKey: els.openrouterApiKey.value.trim(),
+        openrouterModel: els.modelOpenrouter.value || state.settings.openrouterModel,
+      },
+      'OpenRouter settings saved',
+    );
+    await refreshOpenrouterModels();
+  });
+
   els.saveUi.addEventListener('click', async () => {
     await savePatch(
       {
@@ -346,9 +431,12 @@ function wireSettingsForms() {
   };
   els.providerLocal.addEventListener('change', onProviderChange);
   els.providerOpenai.addEventListener('change', onProviderChange);
+  els.providerOpenrouter.addEventListener('change', onProviderChange);
 
   els.reloadModels.addEventListener('click', refreshLocalModels);
   els.reloadOpenaiModels.addEventListener('click', refreshOpenaiModels);
+  els.reloadOpenrouterModels.addEventListener('click', refreshOpenrouterModels);
+  els.openrouterFilter.addEventListener('input', renderOpenrouterSelect);
 
   els.testBaseUrl.addEventListener('click', async () => {
     setInlineResult(els.baseUrlResult, 'Testing…', null);
@@ -380,6 +468,25 @@ function wireSettingsForms() {
       setInlineResult(els.openaiResult, `Failed: ${e.message}`, 'err');
     } finally {
       els.testOpenai.disabled = false;
+    }
+  });
+
+  els.testOpenrouter.addEventListener('click', async () => {
+    const key = els.openrouterApiKey.value.trim();
+    if (!key) {
+      setInlineResult(els.openrouterResult, 'enter API key first', 'err');
+      return;
+    }
+    setInlineResult(els.openrouterResult, 'Testing…', null);
+    els.testOpenrouter.disabled = true;
+    try {
+      const { base, headers } = providers.openrouter.endpoint({ openrouterApiKey: key });
+      const count = await testEndpoint({ base, headers });
+      setInlineResult(els.openrouterResult, `OK · ${count} models available`, 'ok');
+    } catch (e) {
+      setInlineResult(els.openrouterResult, `Failed: ${e.message}`, 'err');
+    } finally {
+      els.testOpenrouter.disabled = false;
     }
   });
 }

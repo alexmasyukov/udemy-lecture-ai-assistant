@@ -45,6 +45,10 @@
             <input type="radio" name="provider" id="provider-openai" value="openai" />
             <span>OpenAI Cloud</span>
           </label>
+          <label class="radio-row">
+            <input type="radio" name="provider" id="provider-openrouter" value="openrouter" />
+            <span>OpenRouter (300+ models, thinking off)</span>
+          </label>
         </fieldset>
 
         <fieldset id="local-settings" class="form-group">
@@ -89,6 +93,31 @@
             </div>
           </label>
           <button id="save-openai" class="primary" type="button">Save OpenAI settings</button>
+        </fieldset>
+
+        <fieldset id="openrouter-settings" class="form-group hidden">
+          <legend>OpenRouter</legend>
+          <label>
+            API key
+            <div class="row">
+              <input id="openrouterApiKey" type="password" placeholder="sk-or-…" autocomplete="off" />
+              <button id="test-openrouter" class="ghost" type="button">Test</button>
+            </div>
+            <span id="openrouter-result" class="meta"></span>
+          </label>
+          <label>
+            Filter
+            <input id="openrouter-filter" type="text" placeholder="claude, gpt, gemini, free…" autocomplete="off" />
+          </label>
+          <label>
+            Model
+            <div class="row">
+              <select id="model-openrouter"></select>
+              <button id="reload-openrouter-models" class="ghost" type="button">↻</button>
+            </div>
+            <span id="openrouter-model-count" class="meta"></span>
+          </label>
+          <button id="save-openrouter" class="primary" type="button">Save OpenRouter settings</button>
         </fieldset>
       </div>
 

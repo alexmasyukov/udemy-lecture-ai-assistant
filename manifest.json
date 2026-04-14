@@ -1,15 +1,16 @@
 {
   "manifest_version": 3,
   "name": "Udemy Lecture AI",
-  "version": "2.1.0",
-  "description": "Summarize Udemy lecture transcripts and chat with a local LLM (LM Studio / OpenAI-compatible).",
+  "version": "2.2.0",
+  "description": "Summarize Udemy lecture transcripts and chat with a local LLM, OpenAI Cloud, or any OpenRouter model.",
   "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs", "webNavigation"],
   "host_permissions": [
     "https://www.udemy.com/*",
     "https://*.udemycdn.com/*",
     "http://127.0.0.1/*",
     "http://localhost/*",
-    "https://api.openai.com/*"
+    "https://api.openai.com/*",
+    "https://openrouter.ai/*"
   ],
   "background": {
     "service_worker": "background.js",

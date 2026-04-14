@@ -602,6 +602,16 @@ async function summarizeWithExamples() {
 els.settingsToggle.addEventListener('click', () =>
   els.settingsPanel.classList.toggle('hidden')
 );
+
+document.querySelectorAll('.tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t === tab));
+    document.querySelectorAll('.tab-panel').forEach((p) =>
+      p.classList.toggle('active', p.dataset.tabPanel === target)
+    );
+  });
+});
 els.saveLocal.addEventListener('click', saveLocalSettings);
 els.saveOpenai.addEventListener('click', saveOpenaiSettings);
 els.saveUi.addEventListener('click', saveUiSettings);

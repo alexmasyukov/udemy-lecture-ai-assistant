@@ -28,94 +28,106 @@
     </header>
 
     <section id="settings-panel" class="settings hidden">
-      <fieldset class="provider-group">
-        <legend>Provider</legend>
-        <label class="radio-row">
-          <input type="radio" name="provider" id="provider-local" value="local" />
-          <span>Local LLM (LM Studio / OpenAI-compatible)</span>
-        </label>
-        <label class="radio-row">
-          <input type="radio" name="provider" id="provider-openai" value="openai" />
-          <span>OpenAI Cloud</span>
-        </label>
-      </fieldset>
+      <div class="tabs" role="tablist">
+        <button class="tab active" type="button" data-tab="model" role="tab">Model</button>
+        <button class="tab" type="button" data-tab="prompts" role="tab">Prompts</button>
+        <button class="tab" type="button" data-tab="ui" role="tab">UI</button>
+      </div>
 
-      <fieldset id="local-settings" class="form-group">
-        <legend>Local LLM</legend>
-        <label>
-          Base URL
-          <div class="row">
-            <input id="baseUrl" type="text" placeholder="http://127.0.0.1:1234/v1" />
-            <button id="test-base-url" class="ghost" type="button">Test</button>
-          </div>
-          <span id="base-url-result" class="meta"></span>
-        </label>
-        <label>
-          Model
-          <div class="row">
-            <select id="model-local"></select>
-            <button id="reload-models" class="ghost" type="button">↻</button>
-          </div>
-        </label>
-        <label>
-          Temperature
-          <input id="temperature" type="number" min="0" max="2" step="0.1" />
-        </label>
-        <button id="save-local" class="primary" type="button">Save local settings</button>
-      </fieldset>
+      <div class="tab-panel active" data-tab-panel="model">
+        <fieldset class="provider-group">
+          <legend>Provider</legend>
+          <label class="radio-row">
+            <input type="radio" name="provider" id="provider-local" value="local" />
+            <span>Local LLM (LM Studio / OpenAI-compatible)</span>
+          </label>
+          <label class="radio-row">
+            <input type="radio" name="provider" id="provider-openai" value="openai" />
+            <span>OpenAI Cloud</span>
+          </label>
+        </fieldset>
 
-      <fieldset id="openai-settings" class="form-group hidden">
-        <legend>OpenAI Cloud</legend>
-        <label>
-          API key
-          <div class="row">
-            <input id="openaiApiKey" type="password" placeholder="sk-…" autocomplete="off" />
-            <button id="test-openai" class="ghost" type="button">Test</button>
-          </div>
-          <span id="openai-result" class="meta"></span>
-        </label>
-        <label>
-          Model
-          <div class="row">
-            <select id="model-openai"></select>
-            <button id="reload-openai-models" class="ghost" type="button">↻</button>
-          </div>
-        </label>
-        <button id="save-openai" class="primary" type="button">Save OpenAI settings</button>
-      </fieldset>
+        <fieldset id="local-settings" class="form-group">
+          <legend>Local LLM</legend>
+          <label>
+            Base URL
+            <div class="row">
+              <input id="baseUrl" type="text" placeholder="http://127.0.0.1:1234/v1" />
+              <button id="test-base-url" class="ghost" type="button">Test</button>
+            </div>
+            <span id="base-url-result" class="meta"></span>
+          </label>
+          <label>
+            Model
+            <div class="row">
+              <select id="model-local"></select>
+              <button id="reload-models" class="ghost" type="button">↻</button>
+            </div>
+          </label>
+          <label>
+            Temperature
+            <input id="temperature" type="number" min="0" max="2" step="0.1" />
+          </label>
+          <button id="save-local" class="primary" type="button">Save local settings</button>
+        </fieldset>
 
-      <fieldset class="form-group">
-        <legend>Prompts</legend>
-        <label>
-          Summarize it
-          <textarea id="summaryPrompt" rows="4"></textarea>
-        </label>
-        <label>
-          Summary with examples
-          <textarea id="summaryExamplesPrompt" rows="6"></textarea>
-        </label>
-        <div class="row">
-          <button id="reset-prompts" class="ghost" type="button">Reset to defaults</button>
-          <button id="save-prompts" class="primary" type="button">Save prompts</button>
-        </div>
-      </fieldset>
+        <fieldset id="openai-settings" class="form-group hidden">
+          <legend>OpenAI Cloud</legend>
+          <label>
+            API key
+            <div class="row">
+              <input id="openaiApiKey" type="password" placeholder="sk-…" autocomplete="off" />
+              <button id="test-openai" class="ghost" type="button">Test</button>
+            </div>
+            <span id="openai-result" class="meta"></span>
+          </label>
+          <label>
+            Model
+            <div class="row">
+              <select id="model-openai"></select>
+              <button id="reload-openai-models" class="ghost" type="button">↻</button>
+            </div>
+          </label>
+          <button id="save-openai" class="primary" type="button">Save OpenAI settings</button>
+        </fieldset>
+      </div>
 
-      <fieldset class="form-group">
-        <legend>UI</legend>
-        <label>
-          UI font size (px)
-          <input id="uiFontSize" type="number" min="10" max="28" step="1" />
-        </label>
-        <label>
-          Chat font size (px)
-          <input id="chatFontSize" type="number" min="10" max="32" step="1" />
-        </label>
-        <label class="check-row">
-          <input id="transparentAssistant" type="checkbox" />
-          <span>Transparent background for assistant messages</span>
-        </label>
-        <button id="save-ui" class="primary" type="button">Save UI settings</button>
-      </fieldset>
+      <div class="tab-panel" data-tab-panel="prompts">
+        <fieldset class="form-group">
+          <legend>Prompts</legend>
+          <label>
+            Summarize it
+            <textarea id="summaryPrompt" rows="4"></textarea>
+          </label>
+          <label>
+            Summary with examples
+            <textarea id="summaryExamplesPrompt" rows="6"></textarea>
+          </label>
+          <div class="row">
+            <button id="reset-prompts" class="ghost" type="button">Reset to defaults</button>
+            <button id="save-prompts" class="primary" type="button">Save prompts</button>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="tab-panel" data-tab-panel="ui">
+        <fieldset class="form-group">
+          <legend>UI</legend>
+          <label>
+            UI font size (px)
+            <input id="uiFontSize" type="number" min="10" max="28" step="1" />
+          </label>
+          <label>
+            Chat font size (px)
+            <input id="chatFontSize" type="number" min="10" max="32" step="1" />
+          </label>
+          <label class="check-row">
+            <input id="transparentAssistant" type="checkbox" />
+            <span>Transparent background for assistant messages</span>
+          </label>
+          <button id="save-ui" class="primary" type="button">Save UI settings</button>
+        </fieldset>
+      </div>
     </section>
 
     <section class="chat" id="chat">

@@ -2,15 +2,12 @@ import {
   DEFAULTS,
   DEFAULT_SUMMARY_PROMPT,
   DEFAULT_SUMMARY_EXAMPLES_PROMPT,
-  OPENAI_FALLBACK_MODELS,
 } from './src/defaults.js';
 import { loadSettings, patchSettings } from './src/settings.js';
 import {
   providers,
-  getProvider,
+  getActiveProvider,
   streamChat,
-  testEndpoint,
-  normalizeBaseUrl,
 } from './src/providers.js';
 import { configureMarked } from './src/markdown.js';
 import {
@@ -28,188 +25,69 @@ import {
   applyAppearance,
   autoresizeInput,
   setInlineResult,
-  populateSelect,
 } from './src/ui.js';
 
 configureMarked();
 
 const state = {
-  transcript: null, // { source, text, timestampedText, cues }
+  transcript: null,
   meta: null,
   history: [],
   settings: { ...DEFAULTS },
   busy: false,
   abortController: null,
-  openrouterModelsFull: [], // [{ id, label, contextLength }]
 };
 
-// ----- settings flow -----
+// ----- settings -----
 
-function currentProviderName() {
-  if (els.providerOpenai.checked) return 'openai';
-  if (els.providerOpenrouter.checked) return 'openrouter';
-  return 'local';
+function activeProvider() {
+  return getActiveProvider(state.settings);
 }
 
-function applyProviderUi() {
-  const name = currentProviderName();
-  els.localSettings.classList.toggle('hidden', name !== 'local');
-  els.openaiSettings.classList.toggle('hidden', name !== 'openai');
-  els.openrouterSettings.classList.toggle('hidden', name !== 'openrouter');
+// Merge unsaved form edits (API keys, baseUrl, temperature) into the
+// persisted settings so refresh/test/ask see in-progress edits before
+// the user presses Save. Each provider declares what it considers
+// "form overrides" via its readFormOverrides() method.
+function effectiveSettings() {
+  let merged = { ...state.settings };
+  for (const p of Object.values(providers)) {
+    merged = { ...merged, ...p.readFormOverrides() };
+  }
+  return merged;
+}
+
+function applyProviderVisibility() {
+  for (const p of Object.values(providers)) {
+    els[p.ui.fieldset].classList.toggle('hidden', p.name !== state.settings.provider);
+    els[p.ui.radio].checked = p.name === state.settings.provider;
+  }
 }
 
 function updateProviderStatus() {
-  const name = currentProviderName();
-  if (name === 'openai') {
-    const hasKey = (els.openaiApiKey.value.trim() || state.settings.openaiApiKey || '').length > 0;
-    setStatus(hasKey && els.modelOpenai.value ? 'ok' : 'err');
-  } else if (name === 'openrouter') {
-    const hasKey = (els.openrouterApiKey.value.trim() || state.settings.openrouterApiKey || '').length > 0;
-    setStatus(hasKey && els.modelOpenrouter.value ? 'ok' : 'err');
-  } else {
-    setStatus(els.modelLocal.value ? 'ok' : 'err');
-  }
+  setStatus(activeProvider().isConnected(state.settings) ? 'ok' : 'err');
 }
 
-function readFormIntoSettings() {
-  // Settings currently live in the DOM (inputs) as the source of truth
-  // while a form is open. Snapshot them back into state.settings so
-  // subsequent reads see edits even before Save is pressed.
-  return {
-    ...state.settings,
-    provider: currentProviderName(),
-    baseUrl: els.baseUrl.value.trim() || DEFAULTS.baseUrl,
-    openaiApiKey: els.openaiApiKey.value.trim(),
-    openrouterApiKey: els.openrouterApiKey.value.trim(),
-    temperature: parseFloat(els.temperature.value) || state.settings.temperature,
-  };
-}
+// Settings that live outside any provider. Each tuple is
+// [el ref key, settings key, DOM property to write].
+const UI_BINDINGS = [
+  ['uiFontSize', 'uiFontSize', 'value'],
+  ['chatFontSize', 'chatFontSize', 'value'],
+  ['transparentAssistant', 'transparentAssistant', 'checked'],
+  ['summaryPrompt', 'summaryPrompt', 'value'],
+  ['summaryExamplesPrompt', 'summaryExamplesPrompt', 'value'],
+];
 
-async function refreshLocalModels() {
-  const snapshot = readFormIntoSettings();
-  els.modelLocal.innerHTML = '<option>loading…</option>';
-  try {
-    const ids = await providers.local.listModels(snapshot);
-    populateSelect(els.modelLocal, ids, state.settings.model);
-  } catch (e) {
-    els.modelLocal.innerHTML = '';
-    const opt = document.createElement('option');
-    opt.textContent = `error: ${e.message}`;
-    els.modelLocal.appendChild(opt);
-  } finally {
-    updateProviderStatus();
-  }
-}
-
-async function refreshOpenaiModels() {
-  const snapshot = readFormIntoSettings();
-  if (!snapshot.openaiApiKey) {
-    populateSelect(els.modelOpenai, OPENAI_FALLBACK_MODELS, state.settings.openaiModel);
-    updateProviderStatus();
-    return;
-  }
-  els.modelOpenai.innerHTML = '<option>loading…</option>';
-  try {
-    const ids = await providers.openai.listModels(snapshot);
-    populateSelect(
-      els.modelOpenai,
-      ids.length ? ids : OPENAI_FALLBACK_MODELS,
-      state.settings.openaiModel,
-    );
-  } catch {
-    populateSelect(els.modelOpenai, OPENAI_FALLBACK_MODELS, state.settings.openaiModel);
-  } finally {
-    updateProviderStatus();
-  }
-}
-
-function renderOpenrouterSelect() {
-  const query = els.openrouterFilter.value.trim().toLowerCase();
-  const words = query ? query.split(/\s+/) : [];
-  const full = state.openrouterModelsFull;
-  const filtered = words.length
-    ? full.filter((m) => {
-        const hay = `${m.id} ${m.label}`.toLowerCase();
-        return words.every((w) => hay.includes(w));
-      })
-    : full;
-  els.modelOpenrouter.innerHTML = '';
-  if (!filtered.length) {
-    const opt = document.createElement('option');
-    opt.textContent = full.length ? 'no matches' : 'no models loaded';
-    els.modelOpenrouter.appendChild(opt);
-  } else {
-    const selected = state.settings.openrouterModel;
-    for (const m of filtered) {
-      const opt = document.createElement('option');
-      opt.value = m.id;
-      opt.textContent = m.label;
-      if (m.id === selected) opt.selected = true;
-      els.modelOpenrouter.appendChild(opt);
-    }
-    // If the saved model isn't in the filtered set, prepend it as a
-    // "ghost" option so the user sees what's currently selected.
-    if (selected && !filtered.some((m) => m.id === selected)) {
-      const ghost = document.createElement('option');
-      ghost.value = selected;
-      ghost.textContent = `${selected} (not in filter)`;
-      ghost.selected = true;
-      els.modelOpenrouter.prepend(ghost);
-    }
-  }
-  els.openrouterModelCount.textContent = full.length
-    ? `${filtered.length} / ${full.length} models`
-    : '';
-}
-
-async function refreshOpenrouterModels() {
-  const snapshot = readFormIntoSettings();
-  els.modelOpenrouter.innerHTML = '<option>loading…</option>';
-  try {
-    const items = await providers.openrouter.listModels(snapshot);
-    state.openrouterModelsFull = items;
-    renderOpenrouterSelect();
-  } catch (e) {
-    state.openrouterModelsFull = [];
-    els.modelOpenrouter.innerHTML = '';
-    const opt = document.createElement('option');
-    opt.textContent = `error: ${e.message}`;
-    els.modelOpenrouter.appendChild(opt);
-    els.openrouterModelCount.textContent = '';
-  } finally {
-    updateProviderStatus();
-  }
-}
-
-async function refreshAllModels() {
-  await Promise.all([
-    refreshLocalModels(),
-    refreshOpenaiModels(),
-    refreshOpenrouterModels(),
-  ]);
-}
-
-async function applySettings(settings) {
+function applySettings(settings) {
   state.settings = settings;
-  els.baseUrl.value = settings.baseUrl;
-  els.openaiApiKey.value = settings.openaiApiKey || '';
-  els.openrouterApiKey.value = settings.openrouterApiKey || '';
-  els.temperature.value = settings.temperature;
-  els.uiFontSize.value = settings.uiFontSize;
-  els.chatFontSize.value = settings.chatFontSize;
-  els.transparentAssistant.checked = Boolean(settings.transparentAssistant);
-  els.summaryPrompt.value = settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT;
-  els.summaryExamplesPrompt.value = settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT;
-  if (settings.provider === 'openai') {
-    els.providerOpenai.checked = true;
-  } else if (settings.provider === 'openrouter') {
-    els.providerOpenrouter.checked = true;
-  } else {
-    els.providerLocal.checked = true;
+  for (const [elKey, settingKey, prop] of UI_BINDINGS) {
+    els[elKey][prop] = settings[settingKey] ?? DEFAULTS[settingKey];
+  }
+  for (const p of Object.values(providers)) {
+    p.applyToForm(settings);
   }
   els.strictMode.classList.toggle('active', Boolean(settings.strictMode));
   els.strictMode.setAttribute('aria-pressed', String(Boolean(settings.strictMode)));
-  applyProviderUi();
+  applyProviderVisibility();
   applyFontSizes(settings);
   applyAppearance(settings);
 }
@@ -217,6 +95,12 @@ async function applySettings(settings) {
 async function savePatch(patch, toast) {
   state.settings = await patchSettings(patch);
   if (toast) addMsg('system', toast);
+}
+
+async function refreshAllProviders() {
+  const eff = effectiveSettings();
+  await Promise.all(Object.values(providers).map((p) => p.refresh(eff)));
+  updateProviderStatus();
 }
 
 // ----- transcript -----
@@ -265,13 +149,6 @@ function systemPrompt() {
   });
 }
 
-function activeModel() {
-  const name = currentProviderName();
-  if (name === 'openai') return els.modelOpenai.value || state.settings.openaiModel;
-  if (name === 'openrouter') return els.modelOpenrouter.value || state.settings.openrouterModel;
-  return els.modelLocal.value || state.settings.model;
-}
-
 async function ask(question, { skipHistory = false } = {}) {
   addMsg('user', question);
   const pending = addMsg('assistant', '…');
@@ -285,14 +162,14 @@ async function ask(question, { skipHistory = false } = {}) {
       ...(skipHistory ? [] : state.history),
       { role: 'user', content: question },
     ];
-    const snapshot = readFormIntoSettings();
-    const provider = providers[currentProviderName()];
+    const provider = activeProvider();
+    const settings = effectiveSettings();
     collected = await streamChat({
       provider,
-      settings: snapshot,
+      settings,
       messages,
-      model: activeModel(),
-      temperature: snapshot.temperature,
+      model: provider.activeModel(settings),
+      temperature: settings.temperature,
       signal: controller.signal,
       onDelta: (content) => {
         collected = content;
@@ -338,7 +215,7 @@ async function summarizeWith(prompt) {
   await ask(prompt, { skipHistory: true });
 }
 
-// ----- event wiring -----
+// ----- wiring -----
 
 function closeMenu() {
   els.menu.classList.add('hidden');
@@ -357,44 +234,68 @@ function wireSettingsTabs() {
   });
 }
 
+// Wire up every handler that a provider's form needs — radio change,
+// Save, Test, Reload, optional Filter. Each provider declares its
+// element ids via `ui.*`; this function touches no provider-specific
+// fields and stays constant regardless of how many providers exist.
+function wireProvider(provider) {
+  const { ui } = provider;
+
+  els[ui.radio].addEventListener('change', async () => {
+    await savePatch({ provider: provider.name });
+    applyProviderVisibility();
+    updateProviderStatus();
+  });
+
+  els[ui.save].addEventListener('click', async () => {
+    await savePatch(provider.collectFormPatch(), `${provider.label} settings saved`);
+    await provider.refresh(effectiveSettings());
+    updateProviderStatus();
+  });
+
+  if (ui.modelReload) {
+    els[ui.modelReload].addEventListener('click', async () => {
+      await provider.refresh(effectiveSettings());
+      updateProviderStatus();
+    });
+  }
+
+  const testBtnKey = ui.apiKeyTest || ui.baseUrlTest;
+  const resultElKey = ui.apiKeyResult || ui.baseUrlResult;
+  if (testBtnKey && resultElKey) {
+    els[testBtnKey].addEventListener('click', async () => {
+      setInlineResult(els[resultElKey], 'Testing…', null);
+      els[testBtnKey].disabled = true;
+      try {
+        const count = await provider.testCredentials();
+        setInlineResult(
+          els[resultElKey],
+          `OK · ${count} model${count === 1 ? '' : 's'} available`,
+          'ok',
+        );
+      } catch (e) {
+        setInlineResult(els[resultElKey], `Failed: ${e.message}`, 'err');
+      } finally {
+        els[testBtnKey].disabled = false;
+      }
+    });
+  }
+
+  if (ui.filter && provider.onFilterInput) {
+    els[ui.filter].addEventListener('input', () =>
+      provider.onFilterInput(state.settings),
+    );
+  }
+}
+
 function wireSettingsForms() {
   els.settingsToggle.addEventListener('click', () =>
     els.settingsPanel.classList.toggle('hidden'),
   );
 
-  els.saveLocal.addEventListener('click', async () => {
-    await savePatch(
-      {
-        baseUrl: els.baseUrl.value.trim() || DEFAULTS.baseUrl,
-        model: els.modelLocal.value || state.settings.model,
-        temperature: parseFloat(els.temperature.value) || DEFAULTS.temperature,
-      },
-      'Local settings saved',
-    );
-    await refreshLocalModels();
-  });
-
-  els.saveOpenai.addEventListener('click', async () => {
-    await savePatch(
-      {
-        openaiApiKey: els.openaiApiKey.value.trim(),
-        openaiModel: els.modelOpenai.value || state.settings.openaiModel,
-      },
-      'OpenAI settings saved',
-    );
-    await refreshOpenaiModels();
-  });
-
-  els.saveOpenrouter.addEventListener('click', async () => {
-    await savePatch(
-      {
-        openrouterApiKey: els.openrouterApiKey.value.trim(),
-        openrouterModel: els.modelOpenrouter.value || state.settings.openrouterModel,
-      },
-      'OpenRouter settings saved',
-    );
-    await refreshOpenrouterModels();
-  });
+  for (const p of Object.values(providers)) {
+    wireProvider(p);
+  }
 
   els.saveUi.addEventListener('click', async () => {
     await savePatch(
@@ -413,7 +314,8 @@ function wireSettingsForms() {
     await savePatch(
       {
         summaryPrompt: els.summaryPrompt.value.trim() || DEFAULT_SUMMARY_PROMPT,
-        summaryExamplesPrompt: els.summaryExamplesPrompt.value.trim() || DEFAULT_SUMMARY_EXAMPLES_PROMPT,
+        summaryExamplesPrompt:
+          els.summaryExamplesPrompt.value.trim() || DEFAULT_SUMMARY_EXAMPLES_PROMPT,
       },
       'Prompts saved',
     );
@@ -422,72 +324,6 @@ function wireSettingsForms() {
   els.resetPrompts.addEventListener('click', () => {
     els.summaryPrompt.value = DEFAULT_SUMMARY_PROMPT;
     els.summaryExamplesPrompt.value = DEFAULT_SUMMARY_EXAMPLES_PROMPT;
-  });
-
-  const onProviderChange = async () => {
-    applyProviderUi();
-    await savePatch({ provider: currentProviderName() });
-    updateProviderStatus();
-  };
-  els.providerLocal.addEventListener('change', onProviderChange);
-  els.providerOpenai.addEventListener('change', onProviderChange);
-  els.providerOpenrouter.addEventListener('change', onProviderChange);
-
-  els.reloadModels.addEventListener('click', refreshLocalModels);
-  els.reloadOpenaiModels.addEventListener('click', refreshOpenaiModels);
-  els.reloadOpenrouterModels.addEventListener('click', refreshOpenrouterModels);
-  els.openrouterFilter.addEventListener('input', renderOpenrouterSelect);
-
-  els.testBaseUrl.addEventListener('click', async () => {
-    setInlineResult(els.baseUrlResult, 'Testing…', null);
-    els.testBaseUrl.disabled = true;
-    try {
-      const base = normalizeBaseUrl(els.baseUrl.value);
-      const count = await testEndpoint({ base, headers: {} });
-      setInlineResult(els.baseUrlResult, `OK · ${count} model${count === 1 ? '' : 's'}`, 'ok');
-    } catch (e) {
-      setInlineResult(els.baseUrlResult, `Failed: ${e.message}`, 'err');
-    } finally {
-      els.testBaseUrl.disabled = false;
-    }
-  });
-
-  els.testOpenai.addEventListener('click', async () => {
-    const key = els.openaiApiKey.value.trim();
-    if (!key) {
-      setInlineResult(els.openaiResult, 'enter API key first', 'err');
-      return;
-    }
-    setInlineResult(els.openaiResult, 'Testing…', null);
-    els.testOpenai.disabled = true;
-    try {
-      const { base, headers } = providers.openai.endpoint({ openaiApiKey: key });
-      const count = await testEndpoint({ base, headers });
-      setInlineResult(els.openaiResult, `OK · ${count} models available`, 'ok');
-    } catch (e) {
-      setInlineResult(els.openaiResult, `Failed: ${e.message}`, 'err');
-    } finally {
-      els.testOpenai.disabled = false;
-    }
-  });
-
-  els.testOpenrouter.addEventListener('click', async () => {
-    const key = els.openrouterApiKey.value.trim();
-    if (!key) {
-      setInlineResult(els.openrouterResult, 'enter API key first', 'err');
-      return;
-    }
-    setInlineResult(els.openrouterResult, 'Testing…', null);
-    els.testOpenrouter.disabled = true;
-    try {
-      const { base, headers } = providers.openrouter.endpoint({ openrouterApiKey: key });
-      const count = await testEndpoint({ base, headers });
-      setInlineResult(els.openrouterResult, `OK · ${count} models available`, 'ok');
-    } catch (e) {
-      setInlineResult(els.openrouterResult, `Failed: ${e.message}`, 'err');
-    } finally {
-      els.testOpenrouter.disabled = false;
-    }
   });
 }
 
@@ -552,7 +388,7 @@ function wireComposer() {
   els.askInput.addEventListener('input', autoresizeInput);
   els.askInput.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
-    if (e.altKey || e.shiftKey) return; // newline
+    if (e.altKey || e.shiftKey) return;
     e.preventDefault();
     els.askForm.requestSubmit();
   });
@@ -589,9 +425,8 @@ function wireNavigation() {
   wireComposer();
   wireNavigation();
 
-  const settings = await loadSettings();
-  await applySettings(settings);
-  await refreshAllModels();
+  applySettings(await loadSettings());
+  await refreshAllProviders();
 
   const tab = await getActiveUdemyTab();
   if (!tab) {

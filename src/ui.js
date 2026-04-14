@@ -118,6 +118,7 @@ export function populateSelect(selectEl, ids, selected) {
   if (!ids.length) {
     const opt = document.createElement('option');
     opt.textContent = 'no models available';
+    opt.disabled = true;
     selectEl.appendChild(opt);
     return;
   }

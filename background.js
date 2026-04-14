@@ -22,8 +22,11 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 const DEFAULTS = {
+  provider: 'local', // 'local' | 'openai'
   baseUrl: 'http://127.0.0.1:1234/v1',
   model: 'gemma-4-e4b-it',
+  openaiApiKey: '',
+  openaiModel: 'gpt-5.4-mini',
   temperature: 0.3,
   uiFontSize: 13,
   chatFontSize: 16,

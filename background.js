@@ -21,6 +21,12 @@ chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ tabId: tab.id });
 });
 
+const DEFAULT_SUMMARY_PROMPT =
+  'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Используй Markdown для форматирования.';
+
+const DEFAULT_SUMMARY_EXAMPLES_PROMPT =
+  'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Для каждой ключевой концепции приведи короткий рабочий пример на том языке программирования, о котором идёт речь в лекции. Примеры должны быть самодостаточными и демонстрировать именно тот момент, который обсуждается. Используй Markdown для форматирования.';
+
 const DEFAULTS = {
   provider: 'local', // 'local' | 'openai'
   baseUrl: 'http://127.0.0.1:1234/v1',
@@ -31,6 +37,8 @@ const DEFAULTS = {
   uiFontSize: 13,
   chatFontSize: 16,
   transparentAssistant: false,
+  summaryPrompt: DEFAULT_SUMMARY_PROMPT,
+  summaryExamplesPrompt: DEFAULT_SUMMARY_EXAMPLES_PROMPT,
 };
 
 async function getSettings() {

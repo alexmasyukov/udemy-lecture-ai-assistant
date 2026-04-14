@@ -26,6 +26,10 @@ const els = {
   saveLocal: $('#save-local'),
   saveOpenai: $('#save-openai'),
   saveUi: $('#save-ui'),
+  summaryPrompt: $('#summaryPrompt'),
+  summaryExamplesPrompt: $('#summaryExamplesPrompt'),
+  savePrompts: $('#save-prompts'),
+  resetPrompts: $('#reset-prompts'),
   loadTranscript: $('#load-transcript'),
   summarize: $('#summarize'),
   summarizeExamples: $('#summarize-examples'),
@@ -166,6 +170,11 @@ function applyAppearance() {
 const OPENAI_BASE = 'https://api.openai.com/v1';
 const OPENAI_MODELS = ['gpt-5.4', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-4o', 'gpt-4o-mini'];
 
+const DEFAULT_SUMMARY_PROMPT =
+  'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Используй Markdown для форматирования.';
+const DEFAULT_SUMMARY_EXAMPLES_PROMPT =
+  'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Для каждой ключевой концепции приведи короткий рабочий пример на том языке программирования, о котором идёт речь в лекции. Примеры должны быть самодостаточными и демонстрировать именно тот момент, который обсуждается. Используй Markdown для форматирования.';
+
 function currentProvider() {
   return els.providerOpenai.checked ? 'openai' : 'local';
 }
@@ -201,6 +210,8 @@ async function loadSettings() {
   els.uiFontSize.value = state.settings.uiFontSize;
   els.chatFontSize.value = state.settings.chatFontSize;
   els.transparentAssistant.checked = Boolean(state.settings.transparentAssistant);
+  els.summaryPrompt.value = state.settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT;
+  els.summaryExamplesPrompt.value = state.settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT;
   if (state.settings.provider === 'openai') {
     els.providerOpenai.checked = true;
   } else {
@@ -332,6 +343,22 @@ async function saveOpenaiSettings() {
   addMsg('system', 'OpenAI settings saved');
   await fetchOpenaiModels();
   updateProviderStatus();
+}
+
+async function savePromptSettings() {
+  const next = {
+    ...state.settings,
+    summaryPrompt: els.summaryPrompt.value.trim() || DEFAULT_SUMMARY_PROMPT,
+    summaryExamplesPrompt: els.summaryExamplesPrompt.value.trim() || DEFAULT_SUMMARY_EXAMPLES_PROMPT,
+  };
+  await send('SAVE_SETTINGS', { settings: next });
+  state.settings = next;
+  addMsg('system', 'Prompts saved');
+}
+
+function resetPromptsToDefaults() {
+  els.summaryPrompt.value = DEFAULT_SUMMARY_PROMPT;
+  els.summaryExamplesPrompt.value = DEFAULT_SUMMARY_EXAMPLES_PROMPT;
 }
 
 async function saveUiSettings() {
@@ -557,8 +584,7 @@ async function summarize() {
     await loadTranscript();
     if (!state.transcript) return;
   }
-  const prompt =
-    'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Используй Markdown для форматирования.';
+  const prompt = state.settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT;
   await ask(prompt, { skipHistory: true });
 }
 
@@ -567,8 +593,7 @@ async function summarizeWithExamples() {
     await loadTranscript();
     if (!state.transcript) return;
   }
-  const prompt =
-    'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Для каждой ключевой концепции приведи короткий рабочий пример на том языке программирования, о котором идёт речь в лекции. Примеры должны быть самодостаточными и демонстрировать именно тот момент, который обсуждается. Используй Markdown для форматирования.';
+  const prompt = state.settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT;
   await ask(prompt, { skipHistory: true });
 }
 
@@ -580,6 +605,8 @@ els.settingsToggle.addEventListener('click', () =>
 els.saveLocal.addEventListener('click', saveLocalSettings);
 els.saveOpenai.addEventListener('click', saveOpenaiSettings);
 els.saveUi.addEventListener('click', saveUiSettings);
+els.savePrompts.addEventListener('click', savePromptSettings);
+els.resetPrompts.addEventListener('click', resetPromptsToDefaults);
 els.providerLocal.addEventListener('change', () => {
   applyProviderUi();
   saveProvider();

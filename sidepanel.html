@@ -85,6 +85,22 @@
       </fieldset>
 
       <fieldset class="form-group">
+        <legend>Prompts</legend>
+        <label>
+          Summarize it
+          <textarea id="summaryPrompt" rows="4"></textarea>
+        </label>
+        <label>
+          Summary with examples
+          <textarea id="summaryExamplesPrompt" rows="6"></textarea>
+        </label>
+        <div class="row">
+          <button id="reset-prompts" class="ghost" type="button">Reset to defaults</button>
+          <button id="save-prompts" class="primary" type="button">Save prompts</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="form-group">
         <legend>UI</legend>
         <label>
           UI font size (px)

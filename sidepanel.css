@@ -98,7 +98,8 @@ body {
   color: var(--muted);
 }
 .settings input,
-.settings select {
+.settings select,
+.settings textarea {
   background: var(--panel-2);
   border: 1px solid var(--border);
   color: var(--text);
@@ -106,6 +107,12 @@ body {
   padding: 6px 8px;
   font: inherit;
   width: 100%;
+}
+.settings textarea {
+  resize: vertical;
+  min-height: 60px;
+  font-family: inherit;
+  line-height: 1.4;
 }
 .row { display: flex; gap: 6px; align-items: center; }
 .row > select { flex: 1; }

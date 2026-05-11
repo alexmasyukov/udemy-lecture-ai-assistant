@@ -26,7 +26,11 @@ export async function sendToTab(tabId, message) {
 
 export function buildSystemPrompt({ transcript, meta, strictMode }) {
   const hasTranscript = Boolean(transcript);
-  const hasTimestamps = transcript?.source === 'api';
+  // Detect timestamps from the text so transcripts restored from the
+  // memory backend (where we lose the source flag) still get the
+  // [таймкод] instruction line if their text actually has them.
+  const sample = transcript?.timestampedText || transcript?.text || '';
+  const hasTimestamps = transcript?.source === 'api' || /^\[\d+:\d+/m.test(sample);
   const common = [
     'Ты — помощник-репетитор по лекциям Udemy.',
     'ВАЖНО: всегда отвечай ТОЛЬКО на русском языке.',

@@ -39,10 +39,6 @@ const state = {
   settings: { ...DEFAULTS },
   busy: false,
   abortController: null,
-  // DOM ref to the rendered "saved summary" anchor (first .msg.assistant
-  // at the very top of #messages). Tracked so regenerating a summary
-  // can replace the old one in place instead of appending.
-  summaryEl: null,
 };
 
 // ----- settings -----
@@ -131,17 +127,35 @@ function lectureKey() {
   return { course_id: String(m.courseId), lecture_id: String(m.lectureId) };
 }
 
-async function restoreFromMemory() {
-  if (!state.settings.memoryEnabled) return;
+// Wraps a transcript string saved on the backend into the same shape
+// loadTranscript builds from a fresh content-script response, so the
+// rest of the app (systemPrompt, persistSummary, info line) doesn't
+// need to care where the transcript came from.
+function transcriptFromMemory(text) {
+  return {
+    source: 'memory',
+    locale: null,
+    captionLabel: null,
+    availableCaptions: [],
+    cues: [],
+    text,
+    timestampedText: text,
+  };
+}
+
+async function restoreFromMemory(lectionOverride) {
+  if (!state.settings.memoryEnabled) return null;
   const key = lectureKey();
-  if (!key) return;
+  if (!key) return null;
   const eff = effectiveSettings();
   const [lection, history] = await Promise.all([
-    memory.getLectionByKey(eff, key),
+    lectionOverride !== undefined
+      ? Promise.resolve(lectionOverride)
+      : memory.getLectionByKey(eff, key),
     memory.listHistory(eff, key),
   ]);
   if (lection?.summary) {
-    state.summaryEl = addMsg('assistant', lection.summary, { extraClass: 'summary-anchor' });
+    addMsg('assistant', lection.summary);
     state.history.push({ role: 'assistant', content: lection.summary });
   }
   for (const m of history) {
@@ -149,45 +163,98 @@ async function restoreFromMemory() {
     addMsg(role, m.content);
     state.history.push({ role, content: m.content });
   }
+  return lection;
+}
+
+function postLectureInfo() {
+  if (!state.transcript || !state.meta) return;
+  const t = state.transcript;
+  const localeStr = t.captionLabel ? ` · ${t.captionLabel}` : '';
+  const title = state.meta.lectureTitle || 'Lecture';
+  const cuesPart = t.cues?.length ? ` · ${t.cues.length} cues` : '';
+  addMsg(
+    'system',
+    `${title} — ${t.source.toUpperCase()}${localeStr}${cuesPart} · ${t.text.length.toLocaleString()} chars · lecture ${state.meta.lectureId || '?'}`,
+  );
 }
 
 // ----- transcript -----
 
-async function loadTranscript() {
+// Fetches the transcript from the Udemy DOM/captions API and pushes
+// it to the backend (creating the lection on first run). Used as the
+// primary loader by the Reload button and as a fallback by openLecture
+// when the backend has no saved transcript yet.
+async function fetchFreshTranscript(tab) {
+  const resp = await sendToTab(tab.id, { type: 'GET_TRANSCRIPT' });
+  if (!resp?.ok) throw new Error(resp?.error || 'no response from content script');
+  state.transcript = resp.transcript;
+  state.meta = resp.meta;
+  persistTranscript();
+  return resp;
+}
+
+// Default open flow: prefers the backend's saved transcript and chat
+// so the diff between what the lecture WAS when the user chatted vs.
+// what Udemy serves NOW is preserved. Falls back to fetching from
+// Udemy when the backend has nothing for this lecture (or memory is
+// disabled / offline).
+async function openLecture() {
   const tab = await getActiveUdemyTab();
   if (!tab) {
     addMsg('error', 'Open a Udemy lecture page first.');
     return;
   }
 
-  // Reset chat for new lecture (or reload of same one)
   state.transcript = null;
   state.meta = null;
   state.history = [];
-  state.summaryEl = null;
   els.messages.innerHTML = '';
 
   els.loadTranscript.disabled = true;
   try {
-    const resp = await sendToTab(tab.id, { type: 'GET_TRANSCRIPT' });
-    if (!resp?.ok) throw new Error(resp?.error || 'no response from content script');
-    state.transcript = resp.transcript;
-    state.meta = resp.meta;
+    // Need the lecture meta first to look up the backend record.
+    const metaResp = await sendToTab(tab.id, { type: 'GET_LECTURE_META' });
+    if (!metaResp?.ok) throw new Error(metaResp?.error || 'no lecture meta');
+    state.meta = metaResp.meta;
 
-    // Restore saved summary + chat history first so the lecture-info
-    // line appears below them (chronological order from user POV).
-    await restoreFromMemory();
+    let lection = null;
+    if (state.settings.memoryEnabled) {
+      const key = lectureKey();
+      if (key) lection = await memory.getLectionByKey(effectiveSettings(), key);
+    }
 
-    const t = resp.transcript;
-    const localeStr = t.captionLabel ? ` · ${t.captionLabel}` : '';
-    const title = resp.meta.lectureTitle || 'Lecture';
-    addMsg(
-      'system',
-      `${title} — ${t.source.toUpperCase()}${localeStr} · ${t.cues.length} cues · ${t.text.length.toLocaleString()} chars · lecture ${resp.meta.lectureId || '?'}`,
-    );
+    if (lection?.transcript) {
+      state.transcript = transcriptFromMemory(lection.transcript);
+    } else {
+      await fetchFreshTranscript(tab);
+    }
+
+    await restoreFromMemory(lection);
+    postLectureInfo();
     toggleBusy(false);
   } catch (e) {
-    addMsg('error', `Could not load transcript: ${e.message}`);
+    addMsg('error', `Could not open lecture: ${e.message}`);
+  } finally {
+    els.loadTranscript.disabled = false;
+  }
+}
+
+// Force-refresh the transcript from Udemy, save the new version to the
+// backend, and update state. Does NOT touch chat history or summary —
+// the user may have a chat in progress they want to keep.
+async function reloadTranscriptFromUdemy() {
+  const tab = await getActiveUdemyTab();
+  if (!tab) {
+    addMsg('error', 'Open a Udemy lecture page first.');
+    return;
+  }
+  els.loadTranscript.disabled = true;
+  try {
+    await fetchFreshTranscript(tab);
+    addMsg('system', 'Transcript reloaded from Udemy.');
+    postLectureInfo();
+  } catch (e) {
+    addMsg('error', `Could not reload transcript: ${e.message}`);
   } finally {
     els.loadTranscript.disabled = false;
   }
@@ -283,27 +350,25 @@ async function ask(question) {
 
 // ----- summarize -----
 //
-// Different from `ask`: doesn't write to /history (saved into
-// lections.summary instead), doesn't show the prompt as a user message,
-// streams into a single anchored assistant block at the very top of the
-// chat, and replaces it on regeneration.
+// Different from `ask`: doesn't show the prompt as a user message and
+// doesn't write to /history (the result is saved into lections.summary
+// instead). Always uses the freshest transcript from Udemy — a saved
+// chat may be tied to an older lecture revision, but a fresh summary
+// should reflect what the user is looking at right now.
 async function runSummary(prompt) {
-  if (!state.transcript) {
-    await loadTranscript();
-    if (!state.transcript) return;
+  const tab = await getActiveUdemyTab();
+  if (!tab) {
+    addMsg('error', 'Open a Udemy lecture page first.');
+    return;
+  }
+  try {
+    await fetchFreshTranscript(tab);
+  } catch (e) {
+    addMsg('error', `Could not fetch transcript: ${e.message}`);
+    return;
   }
 
-  // Drop previous summary anchor (DOM + first item in state.history if it's the summary).
-  if (state.summaryEl) {
-    state.summaryEl.remove();
-    state.summaryEl = null;
-    if (state.history[0]?.role === 'assistant') state.history.shift();
-  }
-
-  const summaryEl = addMsg('assistant', '…', { prepend: true, extraClass: 'summary-anchor' });
-  state.summaryEl = summaryEl;
-  summaryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
+  const pending = addMsg('assistant', '…');
   const controller = new AbortController();
   state.abortController = controller;
   toggleBusy(true);
@@ -327,28 +392,29 @@ async function runSummary(prompt) {
       signal: controller.signal,
       onDelta: (content) => {
         collected = content;
-        setMsgContent(summaryEl, content);
+        const atBottom =
+          els.messages.scrollHeight - els.messages.scrollTop - els.messages.clientHeight < 40;
+        setMsgContent(pending, content);
+        if (atBottom) els.messages.scrollTop = els.messages.scrollHeight;
       },
     });
     setStatus('ok');
     if (!collected) {
-      setMsgContent(summaryEl, '(empty response)');
+      setMsgContent(pending, '(empty response)');
       return;
     }
-    state.history.unshift({ role: 'assistant', content: collected });
+    state.history.push({ role: 'assistant', content: collected });
     persistSummary(collected, model, eff);
   } catch (e) {
     if (e.name === 'AbortError') {
       if (collected) {
-        state.history.unshift({ role: 'assistant', content: collected });
+        state.history.push({ role: 'assistant', content: collected });
         persistSummary(collected, model, eff);
       } else {
-        summaryEl.remove();
-        state.summaryEl = null;
+        pending.remove();
       }
     } else {
-      summaryEl.remove();
-      state.summaryEl = null;
+      pending.remove();
       addMsg('error', e.message);
       setStatus('err');
     }
@@ -356,6 +422,17 @@ async function runSummary(prompt) {
     state.abortController = null;
     toggleBusy(false);
   }
+}
+
+function persistTranscript() {
+  const key = lectureKey();
+  if (!key || !state.settings.memoryEnabled) return;
+  memory.upsertLection(effectiveSettings(), {
+    ...key,
+    title: state.meta?.lectureTitle || 'Lecture',
+    url: state.meta?.url || null,
+    transcript: state.transcript?.timestampedText || state.transcript?.text || null,
+  });
 }
 
 function persistSummary(summary, model, eff) {
@@ -514,7 +591,7 @@ function wireSettingsForms() {
 }
 
 function wireChrome() {
-  els.loadTranscript.addEventListener('click', loadTranscript);
+  els.loadTranscript.addEventListener('click', reloadTranscriptFromUdemy);
 
   els.menuToggle.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -527,13 +604,18 @@ function wireChrome() {
 
   els.summarize.addEventListener('click', () => {
     if (state.busy) return;
-    runSummary(state.settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT);
+    runSummary(state.settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT);
   });
   els.summarizeExamples.addEventListener('click', (e) => {
     e.preventDefault();
     if (state.busy) return;
     closeMenu();
-    runSummary(state.settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT);
+    runSummary(state.settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT);
+  });
+
+  els.loadMemory.addEventListener('click', () => {
+    if (state.busy) return;
+    openLecture();
   });
 
   els.stopBtn.addEventListener('click', () => state.abortController?.abort());
@@ -544,7 +626,6 @@ function wireChrome() {
     if (!confirm('Точно удалить историю чата?')) return;
     state.abortController?.abort();
     state.history = [];
-    state.summaryEl = null;
     els.messages.innerHTML = '';
     els.askInput.focus();
   });
@@ -597,7 +678,7 @@ function wireNavigation() {
       if (details.frameId !== 0) return;
       const tab = await getActiveUdemyTab();
       if (!tab || tab.id !== details.tabId) return;
-      loadTranscript();
+      openLecture();
     },
     { url: [{ hostEquals: 'www.udemy.com', pathContains: '/learn/lecture/' }] },
   );
@@ -617,6 +698,8 @@ function wireNavigation() {
 
   const tab = await getActiveUdemyTab();
   if (!tab) {
-    addMsg('system', 'Open a Udemy lecture and click ↻.');
+    addMsg('system', 'Open a Udemy lecture to begin.');
+  } else {
+    openLecture();
   }
 })();

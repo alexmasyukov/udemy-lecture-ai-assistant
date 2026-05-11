@@ -48,6 +48,7 @@ const ID_MAP = {
   savePrompts: 'save-prompts',
   resetPrompts: 'reset-prompts',
   loadTranscript: 'load-transcript',
+  loadMemory: 'load-memory',
   summarize: 'summarize',
   summarizeExamples: 'summarize-examples',
   clearChat: 'clear-chat',
@@ -77,16 +78,12 @@ export function setMsgContent(div, text) {
   }
 }
 
-export function addMsg(role, text, { prepend = false, extraClass = '' } = {}) {
+export function addMsg(role, text) {
   const div = document.createElement('div');
-  div.className = `msg ${role}${extraClass ? ' ' + extraClass : ''}`;
+  div.className = `msg ${role}`;
   setMsgContent(div, text);
-  if (prepend) {
-    els.messages.prepend(div);
-  } else {
-    els.messages.appendChild(div);
-    els.messages.scrollTop = els.messages.scrollHeight;
-  }
+  els.messages.appendChild(div);
+  els.messages.scrollTop = els.messages.scrollHeight;
   return div;
 }
 

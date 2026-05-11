@@ -143,27 +143,19 @@ function transcriptFromMemory(text) {
   };
 }
 
-async function restoreFromMemory(lectionOverride) {
-  if (!state.settings.memoryEnabled) return null;
+async function restoreFromMemory() {
+  if (!state.settings.memoryEnabled) return;
   const key = lectureKey();
-  if (!key) return null;
-  const eff = effectiveSettings();
-  const [lection, history] = await Promise.all([
-    lectionOverride !== undefined
-      ? Promise.resolve(lectionOverride)
-      : memory.getLectionByKey(eff, key),
-    memory.listHistory(eff, key),
-  ]);
-  if (lection?.summary) {
-    addMsg('assistant', lection.summary);
-    state.history.push({ role: 'assistant', content: lection.summary });
-  }
+  if (!key) return;
+  const history = await memory.listHistory(effectiveSettings(), key);
+  // The backend returns summary regenerations as regular history rows
+  // marked is_summary:true. We render them like any other assistant
+  // message — chronological order, no special anchoring.
   for (const m of history) {
     const role = m.kind === 'q' ? 'user' : 'assistant';
     addMsg(role, m.content);
     state.history.push({ role, content: m.content });
   }
-  return lection;
 }
 
 function postLectureInfo() {
@@ -229,7 +221,7 @@ async function openLecture() {
       await fetchFreshTranscript(tab);
     }
 
-    await restoreFromMemory(lection);
+    await restoreFromMemory();
     postLectureInfo();
     toggleBusy(false);
   } catch (e) {
@@ -350,22 +342,14 @@ async function ask(question) {
 
 // ----- summarize -----
 //
-// Different from `ask`: doesn't show the prompt as a user message and
-// doesn't write to /history (the result is saved into lections.summary
-// instead). Always uses the freshest transcript from Udemy — a saved
-// chat may be tied to an older lecture revision, but a fresh summary
-// should reflect what the user is looking at right now.
+// Different from `ask`: doesn't show the prompt as a user message. The
+// result is stored in /history with is_summary=true (same shape as a
+// regular assistant turn). No /lections/upsert call here — transcript
+// upserts only happen on lecture-open / Reload.
 async function runSummary(prompt) {
-  const tab = await getActiveUdemyTab();
-  if (!tab) {
-    addMsg('error', 'Open a Udemy lecture page first.');
-    return;
-  }
-  try {
-    await fetchFreshTranscript(tab);
-  } catch (e) {
-    addMsg('error', `Could not fetch transcript: ${e.message}`);
-    return;
+  if (!state.transcript) {
+    await openLecture();
+    if (!state.transcript) return;
   }
 
   const pending = addMsg('assistant', '…');
@@ -438,13 +422,12 @@ function persistTranscript() {
 function persistSummary(summary, model, eff) {
   const key = lectureKey();
   if (!key || !state.settings.memoryEnabled) return;
-  memory.upsertLection(eff, {
+  memory.addMessage(eff, {
     ...key,
-    title: state.meta?.lectureTitle || 'Lecture',
-    url: state.meta?.url || null,
-    transcript: state.transcript?.timestampedText || state.transcript?.text || null,
-    summary,
-    summary_model: model,
+    kind: 'a',
+    content: summary,
+    model,
+    is_summary: true,
   });
 }
 

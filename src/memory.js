@@ -84,9 +84,13 @@ export async function listHistory(settings, { course_id, lecture_id, limit = 100
   return r.ok && Array.isArray(r.data) ? r.data : [];
 }
 
-export async function addMessage(settings, { course_id, lecture_id, kind, content, model }) {
+export async function addMessage(
+  settings,
+  { course_id, lecture_id, kind, content, model, is_summary },
+) {
   const body = { course_id: String(course_id), lecture_id: String(lecture_id), kind, content };
   if (model) body.model = model;
+  if (is_summary) body.is_summary = true;
   const r = await request(settings, '/history', {
     method: 'POST',
     body: JSON.stringify(body),

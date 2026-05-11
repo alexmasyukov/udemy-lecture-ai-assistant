@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Udemy Lecture AI",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "description": "Summarize Udemy lecture transcripts and chat with a local LLM, OpenAI Cloud, or any OpenRouter model. Persists chat history and summaries to a local memory backend.",
   "permissions": ["sidePanel", "storage", "scripting", "activeTab", "tabs", "webNavigation"],
   "host_permissions": [

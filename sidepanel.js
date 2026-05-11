@@ -2,6 +2,7 @@ import {
   DEFAULTS,
   DEFAULT_SUMMARY_PROMPT,
   DEFAULT_SUMMARY_EXAMPLES_PROMPT,
+  MEMORY_BASE_FALLBACK,
 } from './src/defaults.js';
 import { loadSettings, patchSettings } from './src/settings.js';
 import {
@@ -15,11 +16,13 @@ import {
   sendToTab,
   buildSystemPrompt,
 } from './src/transcript.js';
+import * as memory from './src/memory.js';
 import {
   els,
   addMsg,
   setMsgContent,
   setStatus,
+  setMemoryStatus,
   setBusy,
   applyFontSizes,
   applyAppearance,
@@ -36,6 +39,10 @@ const state = {
   settings: { ...DEFAULTS },
   busy: false,
   abortController: null,
+  // DOM ref to the rendered "saved summary" anchor (first .msg.assistant
+  // at the very top of #messages). Tracked so regenerating a summary
+  // can replace the old one in place instead of appending.
+  summaryEl: null,
 };
 
 // ----- settings -----
@@ -44,10 +51,6 @@ function activeProvider() {
   return getActiveProvider(state.settings);
 }
 
-// Merge unsaved form edits (API keys, baseUrl, temperature) into the
-// persisted settings so refresh/test/ask see in-progress edits before
-// the user presses Save. Each provider declares what it considers
-// "form overrides" via its readFormOverrides() method.
 function effectiveSettings() {
   let merged = { ...state.settings };
   for (const p of Object.values(providers)) {
@@ -67,14 +70,14 @@ function updateProviderStatus() {
   setStatus(activeProvider().isConnected(state.settings) ? 'ok' : 'err');
 }
 
-// Settings that live outside any provider. Each tuple is
-// [el ref key, settings key, DOM property to write].
 const UI_BINDINGS = [
   ['uiFontSize', 'uiFontSize', 'value'],
   ['chatFontSize', 'chatFontSize', 'value'],
   ['transparentAssistant', 'transparentAssistant', 'checked'],
   ['summaryPrompt', 'summaryPrompt', 'value'],
   ['summaryExamplesPrompt', 'summaryExamplesPrompt', 'value'],
+  ['memoryBaseUrl', 'memoryBaseUrl', 'value'],
+  ['memoryEnabled', 'memoryEnabled', 'checked'],
 ];
 
 function applySettings(settings) {
@@ -103,6 +106,51 @@ async function refreshAllProviders() {
   updateProviderStatus();
 }
 
+// ----- memory -----
+
+memory.onMemoryStatus((online) => {
+  if (!state.settings.memoryEnabled) {
+    setMemoryStatus(null);
+  } else {
+    setMemoryStatus(online ? 'ok' : 'err');
+  }
+});
+
+async function refreshMemoryStatus() {
+  if (!state.settings.memoryEnabled) {
+    setMemoryStatus(null);
+    return;
+  }
+  const ok = await memory.health(state.settings);
+  setMemoryStatus(ok ? 'ok' : 'err');
+}
+
+function lectureKey() {
+  const m = state.meta;
+  if (!m?.courseId || !m?.lectureId) return null;
+  return { course_id: String(m.courseId), lecture_id: String(m.lectureId) };
+}
+
+async function restoreFromMemory() {
+  if (!state.settings.memoryEnabled) return;
+  const key = lectureKey();
+  if (!key) return;
+  const eff = effectiveSettings();
+  const [lection, history] = await Promise.all([
+    memory.getLectionByKey(eff, key),
+    memory.listHistory(eff, key),
+  ]);
+  if (lection?.summary) {
+    state.summaryEl = addMsg('assistant', lection.summary, { extraClass: 'summary-anchor' });
+    state.history.push({ role: 'assistant', content: lection.summary });
+  }
+  for (const m of history) {
+    const role = m.kind === 'q' ? 'user' : 'assistant';
+    addMsg(role, m.content);
+    state.history.push({ role, content: m.content });
+  }
+}
+
 // ----- transcript -----
 
 async function loadTranscript() {
@@ -111,14 +159,25 @@ async function loadTranscript() {
     addMsg('error', 'Open a Udemy lecture page first.');
     return;
   }
-  els.loadTranscript.disabled = true;
+
+  // Reset chat for new lecture (or reload of same one)
   state.transcript = null;
   state.meta = null;
+  state.history = [];
+  state.summaryEl = null;
+  els.messages.innerHTML = '';
+
+  els.loadTranscript.disabled = true;
   try {
     const resp = await sendToTab(tab.id, { type: 'GET_TRANSCRIPT' });
     if (!resp?.ok) throw new Error(resp?.error || 'no response from content script');
     state.transcript = resp.transcript;
     state.meta = resp.meta;
+
+    // Restore saved summary + chat history first so the lecture-info
+    // line appears below them (chronological order from user POV).
+    await restoreFromMemory();
+
     const t = resp.transcript;
     const localeStr = t.captionLabel ? ` · ${t.captionLabel}` : '';
     const title = resp.meta.lectureTitle || 'Lecture';
@@ -149,27 +208,36 @@ function systemPrompt() {
   });
 }
 
-async function ask(question, { skipHistory = false } = {}) {
+async function ask(question) {
   addMsg('user', question);
   const pending = addMsg('assistant', '…');
   const controller = new AbortController();
   state.abortController = controller;
   toggleBusy(true);
   let collected = '';
+
+  const eff = effectiveSettings();
+  const provider = activeProvider();
+  const model = provider.activeModel(eff);
+  const key = lectureKey();
+  const memOn = state.settings.memoryEnabled && Boolean(key);
+
+  if (memOn) {
+    memory.addMessage(eff, { ...key, kind: 'q', content: question });
+  }
+
   try {
     const messages = [
       { role: 'system', content: systemPrompt() },
-      ...(skipHistory ? [] : state.history),
+      ...state.history,
       { role: 'user', content: question },
     ];
-    const provider = activeProvider();
-    const settings = effectiveSettings();
     collected = await streamChat({
       provider,
-      settings,
+      settings: eff,
       messages,
-      model: provider.activeModel(settings),
-      temperature: settings.temperature,
+      model,
+      temperature: eff.temperature,
       signal: controller.signal,
       onDelta: (content) => {
         collected = content;
@@ -185,6 +253,9 @@ async function ask(question, { skipHistory = false } = {}) {
       { role: 'user', content: question },
       { role: 'assistant', content: collected },
     );
+    if (collected && memOn) {
+      memory.addMessage(eff, { ...key, kind: 'a', content: collected, model });
+    }
   } catch (e) {
     if (e.name === 'AbortError') {
       if (collected) {
@@ -192,6 +263,9 @@ async function ask(question, { skipHistory = false } = {}) {
           { role: 'user', content: question },
           { role: 'assistant', content: collected },
         );
+        if (memOn) {
+          memory.addMessage(eff, { ...key, kind: 'a', content: collected, model });
+        }
       } else {
         pending.remove();
       }
@@ -207,12 +281,94 @@ async function ask(question, { skipHistory = false } = {}) {
   }
 }
 
-async function summarizeWith(prompt) {
+// ----- summarize -----
+//
+// Different from `ask`: doesn't write to /history (saved into
+// lections.summary instead), doesn't show the prompt as a user message,
+// streams into a single anchored assistant block at the very top of the
+// chat, and replaces it on regeneration.
+async function runSummary(prompt) {
   if (!state.transcript) {
     await loadTranscript();
     if (!state.transcript) return;
   }
-  await ask(prompt, { skipHistory: true });
+
+  // Drop previous summary anchor (DOM + first item in state.history if it's the summary).
+  if (state.summaryEl) {
+    state.summaryEl.remove();
+    state.summaryEl = null;
+    if (state.history[0]?.role === 'assistant') state.history.shift();
+  }
+
+  const summaryEl = addMsg('assistant', '…', { prepend: true, extraClass: 'summary-anchor' });
+  state.summaryEl = summaryEl;
+  summaryEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  const controller = new AbortController();
+  state.abortController = controller;
+  toggleBusy(true);
+  let collected = '';
+
+  const eff = effectiveSettings();
+  const provider = activeProvider();
+  const model = provider.activeModel(eff);
+
+  try {
+    const messages = [
+      { role: 'system', content: systemPrompt() },
+      { role: 'user', content: prompt },
+    ];
+    collected = await streamChat({
+      provider,
+      settings: eff,
+      messages,
+      model,
+      temperature: eff.temperature,
+      signal: controller.signal,
+      onDelta: (content) => {
+        collected = content;
+        setMsgContent(summaryEl, content);
+      },
+    });
+    setStatus('ok');
+    if (!collected) {
+      setMsgContent(summaryEl, '(empty response)');
+      return;
+    }
+    state.history.unshift({ role: 'assistant', content: collected });
+    persistSummary(collected, model, eff);
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      if (collected) {
+        state.history.unshift({ role: 'assistant', content: collected });
+        persistSummary(collected, model, eff);
+      } else {
+        summaryEl.remove();
+        state.summaryEl = null;
+      }
+    } else {
+      summaryEl.remove();
+      state.summaryEl = null;
+      addMsg('error', e.message);
+      setStatus('err');
+    }
+  } finally {
+    state.abortController = null;
+    toggleBusy(false);
+  }
+}
+
+function persistSummary(summary, model, eff) {
+  const key = lectureKey();
+  if (!key || !state.settings.memoryEnabled) return;
+  memory.upsertLection(eff, {
+    ...key,
+    title: state.meta?.lectureTitle || 'Lecture',
+    url: state.meta?.url || null,
+    transcript: state.transcript?.timestampedText || state.transcript?.text || null,
+    summary,
+    summary_model: model,
+  });
 }
 
 // ----- wiring -----
@@ -234,10 +390,6 @@ function wireSettingsTabs() {
   });
 }
 
-// Wire up every handler that a provider's form needs — radio change,
-// Save, Test, Reload, optional Filter. Each provider declares its
-// element ids via `ui.*`; this function touches no provider-specific
-// fields and stays constant regardless of how many providers exist.
 function wireProvider(provider) {
   const { ui } = provider;
 
@@ -288,6 +440,38 @@ function wireProvider(provider) {
   }
 }
 
+function wireMemoryForm() {
+  els.saveMemory.addEventListener('click', async () => {
+    await savePatch(
+      {
+        memoryBaseUrl: els.memoryBaseUrl.value.trim() || MEMORY_BASE_FALLBACK,
+        memoryEnabled: els.memoryEnabled.checked,
+      },
+      'Memory settings saved',
+    );
+    await refreshMemoryStatus();
+  });
+
+  els.testMemory.addEventListener('click', async () => {
+    setInlineResult(els.memoryResult, 'Testing…', null);
+    els.testMemory.disabled = true;
+    try {
+      const probe = {
+        memoryEnabled: true,
+        memoryBaseUrl: els.memoryBaseUrl.value.trim() || MEMORY_BASE_FALLBACK,
+      };
+      const ok = await memory.health(probe);
+      setInlineResult(
+        els.memoryResult,
+        ok ? 'OK · backend reachable' : 'Failed: no response from backend',
+        ok ? 'ok' : 'err',
+      );
+    } finally {
+      els.testMemory.disabled = false;
+    }
+  });
+}
+
 function wireSettingsForms() {
   els.settingsToggle.addEventListener('click', () =>
     els.settingsPanel.classList.toggle('hidden'),
@@ -325,6 +509,8 @@ function wireSettingsForms() {
     els.summaryPrompt.value = DEFAULT_SUMMARY_PROMPT;
     els.summaryExamplesPrompt.value = DEFAULT_SUMMARY_EXAMPLES_PROMPT;
   });
+
+  wireMemoryForm();
 }
 
 function wireChrome() {
@@ -341,13 +527,13 @@ function wireChrome() {
 
   els.summarize.addEventListener('click', () => {
     if (state.busy) return;
-    summarizeWith(state.settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT);
+    runSummary(state.settings.summaryPrompt || DEFAULT_SUMMARY_PROMPT);
   });
   els.summarizeExamples.addEventListener('click', (e) => {
     e.preventDefault();
     if (state.busy) return;
     closeMenu();
-    summarizeWith(state.settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT);
+    runSummary(state.settings.summaryExamplesPrompt || DEFAULT_SUMMARY_EXAMPLES_PROMPT);
   });
 
   els.stopBtn.addEventListener('click', () => state.abortController?.abort());
@@ -358,6 +544,7 @@ function wireChrome() {
     if (!confirm('Точно удалить историю чата?')) return;
     state.abortController?.abort();
     state.history = [];
+    state.summaryEl = null;
     els.messages.innerHTML = '';
     els.askInput.focus();
   });
@@ -426,7 +613,7 @@ function wireNavigation() {
   wireNavigation();
 
   applySettings(await loadSettings());
-  await refreshAllProviders();
+  await Promise.all([refreshAllProviders(), refreshMemoryStatus()]);
 
   const tab = await getActiveUdemyTab();
   if (!tab) {

@@ -10,8 +10,10 @@
   <body>
     <header class="topbar">
       <div class="status">
-        <span class="dot" id="status-dot"></span>
+        <span class="dot" id="status-dot" title="LLM"></span>
         <span class="status-label" id="status-label">LLM offline</span>
+        <span class="dot" id="memory-dot" title="Memory backend"></span>
+        <span class="status-label" id="memory-label">Memory off</span>
       </div>
       <div class="actions">
         <button id="summarize" class="icon-btn text-btn" title="Summarize this lecture">Summarize it</button>
@@ -32,6 +34,7 @@
         <button class="tab active" type="button" data-tab="model" role="tab">Model</button>
         <button class="tab" type="button" data-tab="prompts" role="tab">Prompts</button>
         <button class="tab" type="button" data-tab="ui" role="tab">UI</button>
+        <button class="tab" type="button" data-tab="memory" role="tab">Memory</button>
       </div>
 
       <div class="tab-panel active" data-tab-panel="model">
@@ -155,6 +158,25 @@
             <span>Transparent background for assistant messages</span>
           </label>
           <button id="save-ui" class="primary" type="button">Save UI settings</button>
+        </fieldset>
+      </div>
+
+      <div class="tab-panel" data-tab-panel="memory">
+        <fieldset class="form-group">
+          <legend>Memory backend</legend>
+          <label class="check-row">
+            <input id="memoryEnabled" type="checkbox" />
+            <span>Enable memory backend (saves chat history and lecture summaries)</span>
+          </label>
+          <label>
+            Base URL
+            <div class="row">
+              <input id="memoryBaseUrl" type="text" placeholder="http://localhost:8088" />
+              <button id="test-memory" class="ghost" type="button">Test</button>
+            </div>
+            <span id="memory-result" class="meta"></span>
+          </label>
+          <button id="save-memory" class="primary" type="button">Save memory settings</button>
         </fieldset>
       </div>
     </section>

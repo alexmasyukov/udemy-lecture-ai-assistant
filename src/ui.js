@@ -3,6 +3,8 @@ import { renderMarkdown } from './markdown.js';
 const ID_MAP = {
   statusDot: 'status-dot',
   statusLabel: 'status-label',
+  memoryDot: 'memory-dot',
+  memoryLabel: 'memory-label',
   settingsToggle: 'settings-toggle',
   settingsPanel: 'settings-panel',
   providerLocal: 'provider-local',
@@ -36,6 +38,11 @@ const ID_MAP = {
   saveLocal: 'save-local',
   saveOpenai: 'save-openai',
   saveUi: 'save-ui',
+  memoryBaseUrl: 'memoryBaseUrl',
+  memoryEnabled: 'memoryEnabled',
+  testMemory: 'test-memory',
+  memoryResult: 'memory-result',
+  saveMemory: 'save-memory',
   summaryPrompt: 'summaryPrompt',
   summaryExamplesPrompt: 'summaryExamplesPrompt',
   savePrompts: 'save-prompts',
@@ -70,12 +77,16 @@ export function setMsgContent(div, text) {
   }
 }
 
-export function addMsg(role, text) {
+export function addMsg(role, text, { prepend = false, extraClass = '' } = {}) {
   const div = document.createElement('div');
-  div.className = `msg ${role}`;
+  div.className = `msg ${role}${extraClass ? ' ' + extraClass : ''}`;
   setMsgContent(div, text);
-  els.messages.appendChild(div);
-  els.messages.scrollTop = els.messages.scrollHeight;
+  if (prepend) {
+    els.messages.prepend(div);
+  } else {
+    els.messages.appendChild(div);
+    els.messages.scrollTop = els.messages.scrollHeight;
+  }
   return div;
 }
 
@@ -84,6 +95,13 @@ export function setStatus(kind) {
   if (kind) els.statusDot.classList.add(kind);
   els.statusLabel.textContent =
     kind === 'ok' ? 'LLM connected' : kind === 'err' ? 'LLM offline' : 'LLM…';
+}
+
+export function setMemoryStatus(kind) {
+  els.memoryDot.classList.remove('ok', 'err');
+  if (kind === 'ok' || kind === 'err') els.memoryDot.classList.add(kind);
+  els.memoryLabel.textContent =
+    kind === 'ok' ? 'Memory online' : kind === 'err' ? 'Memory offline' : 'Memory off';
 }
 
 export function setBusy(busy) {

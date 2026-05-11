@@ -53,6 +53,7 @@ body {
 }
 .dot.ok { background: var(--ok); }
 .dot.err { background: var(--err); }
+.status #memory-dot { margin-left: 6px; }
 
 .icon-btn {
   background: transparent;

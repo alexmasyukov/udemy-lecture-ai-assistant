@@ -1,6 +1,7 @@
 export const OPENAI_BASE = 'https://api.openai.com/v1';
 export const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 export const LOCAL_BASE_FALLBACK = 'http://127.0.0.1:1234/v1';
+export const MEMORY_BASE_FALLBACK = 'http://localhost:8088';
 
 export const DEFAULT_SUMMARY_PROMPT =
   'Сделай саммари этой лекции. Структуру и объём выбирай сам — как считаешь правильным. Используй Markdown для форматирования.';
@@ -23,6 +24,8 @@ export const DEFAULTS = {
   strictMode: true,
   summaryPrompt: DEFAULT_SUMMARY_PROMPT,
   summaryExamplesPrompt: DEFAULT_SUMMARY_EXAMPLES_PROMPT,
+  memoryBaseUrl: MEMORY_BASE_FALLBACK,
+  memoryEnabled: true,
 };
 
 export const OPENAI_FALLBACK_MODELS = [
